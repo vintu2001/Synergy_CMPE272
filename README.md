@@ -1,7 +1,7 @@
 # Agentic Apartment Manager
 
 ## Group Information
-**Group Name:**
+**Group Name: Synergy**
 
 ### Team Members
 - **Maitreya Patankar**
