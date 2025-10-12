@@ -1,58 +1,40 @@
-# PROJECT IDEAS
+# Agentic Apartment Manager
 
-## Agentic Apartment Manager
-### Overview
-The Agentic Apartment Manager (AAM) is an autonomous, AI-driven system designed to
-proactively handle apartment management issues reported by residents through messages. 
-Unlike traditional ticketing systems, AAM anticipates, forecasts, and
-autonomously executes actions to resolve issues such as maintenance, package theft, billing,
-security, and amenity management.
+## Group Information
+**Group Name:**
 
-### Problem
-Current property management tools are reactive, relying on human intervention to classify,
-assign, and resolve issues. This results in inefficiencies, delays, and dissatisfied residents.
+### Team Members
+- **Maitreya Patankar**
+- **Vineet Malewar**
+- **David Wang**
+- **Jeremy Tung**
 
-### Solution
-AAM provides a multi-agent pipeline that:
-- Ingests resident messages in natural language.
-- Classifies the issue (maintenance, billing, delivery, etc.).
-- Forecasts likelihood of repeat or related problems.
-- Simulates multiple resolution options.
-- Decides on the best action using policy-based scoring.
-- Executes the action autonomously (e.g., dispatch work order, reroute delivery, send
-notification).
-- Logs explanations with IBM Watsonx.governance.
-- Monitors system health and actions via Instana and AWS CloudWatch.
+---
 
-## Project Proposal: Agentic Cloud Cost Optimizer
+## Project Summary
+The **Agentic Apartment Manager (AAM)** is an autonomous, AI-driven system that functions as a proactive digital property manager for apartment complexes.  
+It receives resident messages, predicts potential problems, simulates solutions, and autonomously executes actions — with explainability and observability built in.
 
-### Abstract
-This proposal outlines Project Aegis, a smart AI assistant built to automatically fix security problems and save money in a company's cloud environment. The project tackles the major challenges of accidental security mistakes and wasted spending that come with using large-scale cloud services. Aegis works by watching a live feed of all cloud activity, using an AI brain to make decisions, and automatically fixing issues on its own. This solution is a direct example of the 
+Traditional property management tools are reactive and rely on manual intervention.  
+AAM instead operates *agentically* — it understands, forecasts, acts, and explains.
 
-Agentic Era of software, where programs don't just report problems—they actively solve them.
+---
 
-### Problem Statement
-Using cloud platforms like AWS is complex and leads to several key problems that manual oversight cannot solve effectively
 
-Security Mistakes: It's easy for users to accidentally leave a digital "door" unlocked in the cloud, such as making data public by mistake. This creates serious security risks.
+## Agentic Enterprise Stack Alignment
 
-Wasted Money: Companies often pay for cloud services they aren't actually using, like servers that are left running for no reason. This is like leaving the lights on in an empty room and results in significant hidden costs.
+| **Layer** | **Implementation in AAM** | **Functionality** |
+|------------|----------------------------|--------------------|
+| **Governance Layer** | IBM **Watsonx.governance** | Ensures transparency, ethical compliance, and decision accountability through explainable AI logs. |
+| **Agent Layer** | Decision Orchestrator built using **LangChain / CrewAI** | Coordinates sub-agents (classification, prediction, simulation, execution) to perform reasoning, policy enforcement, and decision-making autonomously. |
+| **AI Layer** | Predictive models (XGBoost, ARIMA) + LLMs | Handles message classification, pattern detection, and forecasting of recurring issues or failures. |
+| **Service Layer** | **FastAPI microservices**, AWS Lambda, Kafka/Kinesis | Manages asynchronous communication, event processing, and API interactions with simulated maintenance, billing, and delivery systems. |
+| **Foundation Layer** | **AWS Cloud**, Docker, DynamoDB | Provides scalable infrastructure for running distributed agents and storing message/event history. |
 
-Slow Human Fixes: Currently, most tools just send an alert when something goes wrong. A person then has to see the alert, figure out the problem, and fix it by hand. This process is too slow, and a lot of damage can happen in the meantime.
+This layered design follows the *Agentic Enterprise Stack* model where governance ensures ethics, the agent layer handles autonomy, and the AI, service, and foundation layers provide the intelligence, connectivity, and infrastructure that make autonomous operation possible.
 
-### Proposed Solution
-We propose building Project Aegis, an autonomous agent that works 24/7 to enforce security and cost-saving rules in an AWS account. Aegis is an 
+---
 
-agentic system, meaning it is a smart program that can understand what's happening, make a decision, and take action all by itself, without needing a person to tell it what to do.
+## System Architecture
+The Agentic Apartment Manager is built as a distributed, event-driven system on AWS Cloud, where containerized FastAPI microservices communicate asynchronously through Kafka or Kinesis to process resident messages and management events in real time. A LangChain-powered LLM interprets natural language inputs, and predictive models using XGBoost and ARIMA assess risk and recurrence probabilities. These outputs feed a reasoning engine built with CrewAI and SimPy, which simulates outcomes and autonomously triggers actions via AWS Lambda APIs. Data is stored in DynamoDB and PostgreSQL, monitored through Instana, CloudWatch, and Grafana, while IBM Watsonx.governance ensures explainability and auditability. The result is a cohesive, self-learning architecture that continuously perceives, reasons, and acts to manage apartment operations predictively and autonomously.
 
-### Technical Approach
-The optimizer operates in a continuous three-step loop:
-
-1.⁠ ⁠Perceive (It Watches)
-Aegis watches a live feed of every action happening in the cloud, provided by a service called AWS CloudTrail. This feed is sent through a high-speed messaging system, Apache Kafka, giving the agent a real-time view of the environment.
-
-2.⁠ ⁠Decide (It Thinks)
-When Aegis sees an action, its AI brain (a Large Language Model) checks a rulebook written in plain English. It thinks, "Does this action break one of our rules?" and then decides on the correct way to fix it. This thinking process is organized by a framework called LangChain.
-
-3.⁠ ⁠Act (It Acts)
-If a rule is broken, Aegis does not wait for a person. It instantly uses its tools (the AWS SDK) to fix the problem. This could mean locking a digital door that was left open or shutting down a server that's wasting money.
