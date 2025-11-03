@@ -14,6 +14,7 @@ requests==2.32.3
 
 # LLM APIs
 openai==1.54.0
+google-generativeai==0.8.3
 # huggingface-hub==0.19.4  # Uncomment if using Hugging Face
 
 # Database
