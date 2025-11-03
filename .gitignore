@@ -1,87 +1,34 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-venv/
-ENV/
-env/
-.venv
-
-# Jupyter Notebook
-.ipynb_checkpoints
-*.ipynb
-
-# Environment variables
+# Environment variables (contains sensitive AWS credentials)
+backend/.env
 .env
 .env.local
-.env.*.local
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-.DS_Store
+# Python virtual environments
+backend/venv/
+backend/.venv/
+ml/venv/
+ml/.venv/
+venv/
+.venv/
 
-# AWS
-.aws/
-*.pem
+# Python cache files (generated automatically)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
 
-# Logs
-*.log
-logs/
+# Jupyter notebook checkpoints (generated in ml/notebooks/)
+.ipynb_checkpoints/
+ml/notebooks/.ipynb_checkpoints/
 
-# Models and Data (keep structure, ignore large files)
+# Generated ML data files (created by synthetic_message_generator.py)
+ml/data/*.csv
+ml/data/*.json
+
+# Trained model files (created by model_training.py)
 ml/models/*.pkl
 ml/models/*.joblib
 ml/models/*.h5
-ml/data/*.csv
-ml/data/*.json
-!ml/data/.gitkeep
-!ml/models/.gitkeep
 
-# Node.js (for frontend)
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-
-# Build outputs
-dist/
-build/
-*.tgz
-
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-
-# Docker
-*.dockerignore
-
-# Temporary files
-*.tmp
-*.temp
-.cache/
-
+# macOS system file
+.DS_Store

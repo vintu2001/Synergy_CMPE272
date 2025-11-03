@@ -16,19 +16,7 @@ router = APIRouter()
 
 @router.post("/classify", response_model=ClassificationResponse)
 async def classify_message(request: MessageRequest) -> ClassificationResponse:
-    """
-    Classifies a resident message into category, urgency, and intent.
-    
-    Args:
-        request: MessageRequest containing resident_id and message_text
-        
-    Returns:
-        ClassificationResponse with category, urgency, intent, and confidence
-    """
-    # TODO: Implement LLM-based classification
-    # - Use OpenAI API or Hugging Face for classification
-    # - Detect urgency based on keywords and context
-    # - Identify intent (solve_problem vs human_escalation)
+    # TODO (Ticket 5): Implement LLM classification (OpenAI/HF), infer urgency, detect human_escalation intent
     
     # Placeholder implementation
     return ClassificationResponse(

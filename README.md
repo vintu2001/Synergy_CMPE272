@@ -146,10 +146,19 @@ Once the backend is running, visit:
 
 ---
 
+## Documentation
+
+- **[Team Onboarding Guide](docs/TEAM_ONBOARDING.md)** - Complete setup instructions for team members
+- **[AWS Resources Setup](docs/AWS_RESOURCES_SETUP.md)** - Step-by-step AWS resource creation (SQS, DynamoDB, IAM)
+- **[Task 1 Setup Guide](infrastructure/TASK1_SETUP_GUIDE.md)** - Infrastructure setup checklist
+- **[Project Architecture](docs/architecture.md)** - System architecture overview
+- **[Contributing Guidelines](CONTRIBUTING.md)** - Git workflow and development practices
+
 ## Resources
 
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
 - [AWS Documentation](https://docs.aws.amazon.com/)
-- [Project Architecture](docs/architecture.md)
+- [AWS SQS Documentation](https://docs.aws.amazon.com/sqs/)
+- [AWS DynamoDB Documentation](https://docs.aws.amazon.com/dynamodb/)
 
 

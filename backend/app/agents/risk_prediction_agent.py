@@ -16,19 +16,7 @@ router = APIRouter()
 
 @router.post("/predict-risk", response_model=RiskPredictionResponse)
 async def predict_risk(classification: ClassificationResponse) -> RiskPredictionResponse:
-    """
-    Predicts risk of issue recurrence based on classification.
-    
-    Args:
-        classification: ClassificationResponse from Classification Agent
-        
-    Returns:
-        RiskPredictionResponse with risk_forecast and recurrence_probability
-    """
-    # TODO: Implement risk prediction
-    # - Load trained model (XGBoost or ARIMA) from ml/models/
-    # - Use classification data and historical patterns
-    # - Return risk score (0-1)
+    # TODO (Ticket 9): Load serialized model (from ml/models/), score input, return risk_forecast ∈ [0,1]
     
     # Placeholder implementation
     return RiskPredictionResponse(

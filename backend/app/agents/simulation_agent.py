@@ -16,22 +16,7 @@ router = APIRouter()
 
 @router.post("/simulate", response_model=SimulationResponse)
 async def simulate_resolutions(classification: ClassificationResponse) -> SimulationResponse:
-    """
-    Simulates multiple resolution options and their outcomes.
-    
-    Args:
-        classification: ClassificationResponse from Classification Agent
-        
-    Returns:
-        SimulationResponse with list of simulated options and their outcomes
-    """
-    # TODO: Implement simulation using SimPy
-    # - Generate 3+ resolution options based on category
-    # - Run SimPy simulation for each:
-    #   * Estimate cost
-    #   * Estimate time_to_resolution (hours)
-    #   * Estimate resident_satisfaction_impact (0-1)
-    # - Return all options with simulated outcomes
+    # TODO (Ticket 11): Use SimPy to simulate ≥3 options, estimate cost, time_to_resolution (hrs), satisfaction ∈ [0,1]
     
     # Placeholder implementation
     options = [

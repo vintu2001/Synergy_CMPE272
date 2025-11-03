@@ -19,16 +19,7 @@ logger = logging.getLogger(__name__)
 
 @router.post("/alert-on-call-manager")
 async def alert_on_call_manager(decision: DecisionResponse):
-    """
-    Simulates alerting an on-call manager for human escalation.
-    
-    Args:
-        decision: DecisionResponse with escalation information
-        
-    Returns:
-        Confirmation with alert ID
-    """
-    # TODO: Log escalation to monitoring system
+    # TODO (Ticket 14): Log escalation via monitoring layer
     logger.info(f"ESCALATION ALERT: {decision.reasoning} at {datetime.now()}")
     
     return {
@@ -40,16 +31,7 @@ async def alert_on_call_manager(decision: DecisionResponse):
 
 @router.post("/dispatch-maintenance")
 async def dispatch_maintenance(decision: DecisionResponse):
-    """
-    Simulates dispatching a maintenance request.
-    
-    Args:
-        decision: DecisionResponse with chosen action
-        
-    Returns:
-        Mock work order ID
-    """
-    # TODO: Log to maintenance system
+    # TODO (Ticket 14): Log to maintenance subsystem
     work_order_id = f"WO_{datetime.now().strftime('%Y%m%d%H%M%S')}"
     logger.info(f"Maintenance dispatched: {decision.chosen_action} - Work Order: {work_order_id}")
     
@@ -62,16 +44,7 @@ async def dispatch_maintenance(decision: DecisionResponse):
 
 @router.post("/reroute-package")
 async def reroute_package(decision: DecisionResponse):
-    """
-    Simulates rerouting a package delivery.
-    
-    Args:
-        decision: DecisionResponse with chosen action
-        
-    Returns:
-        Mock tracking number
-    """
-    # TODO: Log to courier system
+    # TODO (Ticket 14): Log to courier subsystem
     tracking_number = f"TRACK_{datetime.now().strftime('%Y%m%d%H%M%S')}"
     logger.info(f"Package rerouted: {decision.chosen_action} - Tracking: {tracking_number}")
     
@@ -84,16 +57,7 @@ async def reroute_package(decision: DecisionResponse):
 
 @router.post("/send-billing-notification")
 async def send_billing_notification(decision: DecisionResponse):
-    """
-    Simulates sending a billing notification.
-    
-    Args:
-        decision: DecisionResponse with chosen action
-        
-    Returns:
-        Success confirmation
-    """
-    # TODO: Log to billing system
+    # TODO (Ticket 14): Log to billing subsystem
     notification_id = f"BILL_{datetime.now().strftime('%Y%m%d%H%M%S')}"
     logger.info(f"Billing notification sent: {decision.chosen_action} - ID: {notification_id}")
     
