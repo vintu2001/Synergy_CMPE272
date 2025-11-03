@@ -1,0 +1,14 @@
+{
+  "name": "aam-frontend",
+  "version": "0.1.0",
+  "description": "Agentic Apartment Manager - Frontend Application",
+  "private": true,
+  "scripts": {
+    "dev": "echo 'Frontend framework not yet selected. Please install React/Vue/Angular first'",
+    "build": "echo 'Frontend framework not yet selected'",
+    "start": "echo 'Frontend framework not yet selected'"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}
+

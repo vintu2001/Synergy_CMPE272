@@ -1,0 +1,34 @@
+# Environment variables (contains sensitive AWS credentials)
+backend/.env
+.env
+.env.local
+
+# Python virtual environments
+backend/venv/
+backend/.venv/
+ml/venv/
+ml/.venv/
+venv/
+.venv/
+
+# Python cache files (generated automatically)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Jupyter notebook checkpoints (generated in ml/notebooks/)
+.ipynb_checkpoints/
+ml/notebooks/.ipynb_checkpoints/
+
+# Generated ML data files (created by synthetic_message_generator.py)
+ml/data/*.csv
+ml/data/*.json
+
+# Trained model files (created by model_training.py)
+ml/models/*.pkl
+ml/models/*.joblib
+ml/models/*.h5
+
+# macOS system file
+.DS_Store
