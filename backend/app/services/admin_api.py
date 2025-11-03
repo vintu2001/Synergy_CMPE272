@@ -23,20 +23,7 @@ ADMIN_API_KEY = os.getenv('ADMIN_API_KEY', 'default-admin-key-change-in-producti
 async def get_all_requests_admin(
     x_api_key: Optional[str] = Header(None, alias="X-API-Key")
 ):
-    """
-    Get all requests for admin dashboard.
-    Requires API key authentication.
-    
-    Args:
-        x_api_key: API key in header (X-API-Key)
-        
-    Returns:
-        AdminRequestResponse with all requests
-        
-    Raises:
-        HTTPException: If API key is invalid
-    """
-    # Simple API key authentication
+    # TODO (Ticket 19): Replace static API key with secure mechanism if needed
     if x_api_key != ADMIN_API_KEY:
         raise HTTPException(
             status_code=401,

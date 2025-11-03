@@ -17,15 +17,6 @@ router = APIRouter()
 
 @router.get("/get-requests/{resident_id}", response_model=List[ResidentRequest])
 async def get_resident_requests(resident_id: str) -> List[ResidentRequest]:
-    """
-    Get all requests for a specific resident.
-    
-    Args:
-        resident_id: Resident identifier
-        
-    Returns:
-        List of ResidentRequest objects
-    """
     requests = get_requests_by_resident(resident_id)
     return requests
 

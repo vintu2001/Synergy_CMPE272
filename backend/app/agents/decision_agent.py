@@ -20,24 +20,7 @@ async def make_decision(
     classification: ClassificationResponse,
     simulation: SimulationResponse
 ) -> DecisionResponse:
-    """
-    Makes the optimal decision based on classification and simulation results.
-    
-    Args:
-        classification: ClassificationResponse with intent and urgency
-        simulation: SimulationResponse with available options
-        
-    Returns:
-        DecisionResponse with chosen action and reasoning
-    """
-    # TODO: Implement decision logic
-    # - If intent == Intent.HUMAN_ESCALATION:
-    #     -> Call /alert-on-call-manager endpoint
-    #     -> Return escalation decision
-    # - Else:
-    #     -> Apply scoring function (urgency weight highest, then cost, satisfaction)
-    #     -> Select best option
-    #     -> Log decision reasoning
+    # TODO (Ticket 13): If intent==human_escalation → call alert API; else score options (urgency>cost>satisfaction), log choice
     
     # Placeholder implementation
     if classification.intent == Intent.HUMAN_ESCALATION:

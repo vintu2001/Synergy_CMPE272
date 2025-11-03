@@ -16,22 +16,9 @@ router = APIRouter()
 
 
 def normalize_text(text: str) -> str:
-    """
-    Normalizes text for processing.
-    
-    Args:
-        text: Raw message text
-        
-    Returns:
-        Normalized text
-    """
-    # Convert to lowercase
+    # TODO (Ticket 4): Keep minimal utility; normalize text before enqueueing
     normalized = text.lower()
-    
-    # Remove excessive whitespace
     normalized = re.sub(r'\s+', ' ', normalized)
-    
-    # Remove special characters (keep letters, numbers, spaces, basic punctuation)
     normalized = re.sub(r'[^a-z0-9\s.,!?]', '', normalized)
     
     return normalized.strip()
@@ -39,27 +26,9 @@ def normalize_text(text: str) -> str:
 
 @router.post("/submit-request")
 async def submit_request(request: MessageRequest):
-    """
-    Receives a message from resident and queues it for processing.
-    
-    Args:
-        request: MessageRequest with resident_id and message_text
-        
-    Returns:
-        Confirmation with request_id
-    """
-    # TODO: Implement message intake
-    # - Normalize the message text
-    # - Put message in SQS queue
-    # - Create initial entry in DynamoDB with status "Submitted"
-    # - Return request_id to user
+    # TODO (Ticket 4): Normalize, send to SQS, create DynamoDB record (status=Submitted), return request_id
     
     normalized_text = normalize_text(request.message_text)
-    
-    # Placeholder: In real implementation, this would:
-    # 1. Send to SQS queue
-    # 2. Create DynamoDB entry
-    # 3. Trigger Lambda function
     
     return {
         "status": "submitted",

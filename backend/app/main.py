@@ -1,6 +1,3 @@
-"""
-FastAPI Main Application Entry Point
-"""
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.models.schemas import HealthCheck
@@ -11,10 +8,9 @@ app = FastAPI(
     version="0.1.0"
 )
 
-# CORS middleware for frontend integration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -23,32 +19,26 @@ app.add_middleware(
 
 @app.get("/", response_model=HealthCheck)
 async def root():
-    """Root endpoint - health check"""
     return {"status": "healthy", "service": "Agentic Apartment Manager API"}
 
 
 @app.get("/health", response_model=HealthCheck)
 async def health_check():
-    """Health check endpoint"""
     return {"status": "healthy", "service": "Agentic Apartment Manager API"}
 
 
-# Register routers
 from app.agents import classification_agent, risk_prediction_agent, simulation_agent, decision_agent
 from app.services import message_intake, execution_layer, admin_api, resident_api
 
-# Agent endpoints
 app.include_router(classification_agent.router, prefix="/api/v1", tags=["agents"])
 app.include_router(risk_prediction_agent.router, prefix="/api/v1", tags=["agents"])
 app.include_router(simulation_agent.router, prefix="/api/v1", tags=["agents"])
 app.include_router(decision_agent.router, prefix="/api/v1", tags=["agents"])
 
-# Service endpoints
 app.include_router(message_intake.router, prefix="/api/v1", tags=["services"])
 app.include_router(execution_layer.router, prefix="/api/v1", tags=["services"])
 app.include_router(resident_api.router, prefix="/api/v1", tags=["services"])
 
-# Admin endpoints
 app.include_router(admin_api.router, prefix="/api/v1", tags=["admin"])
 
 
