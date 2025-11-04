@@ -1,11 +1,17 @@
-"""TODO (Ticket 6): Integrate DynamoDB (PK=request_id), implement create/get/query/update for requests"""
+"""
+Database Service - DynamoDB Integration
+Provides CRUD operations for resident requests stored in DynamoDB.
+"""
 import boto3
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 from app.models.schemas import ResidentRequest, Status
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 dynamodb = boto3.resource(
     'dynamodb',
@@ -25,7 +31,7 @@ def create_request(request: ResidentRequest) -> bool:
         table.put_item(Item=request.dict())
         return True
     except ClientError as e:
-        print(f"Error creating request: {e}")
+        logger.error(f"Error creating request: {e}")
         return False
 
 
@@ -37,7 +43,7 @@ def get_request(request_id: str) -> Optional[ResidentRequest]:
             return ResidentRequest(**response['Item'])
         return None
     except ClientError as e:
-        print(f"Error getting request: {e}")
+        logger.error(f"Error getting request: {e}")
         return None
 
 
@@ -49,7 +55,7 @@ def get_requests_by_resident(resident_id: str) -> List[ResidentRequest]:
         )
         return [ResidentRequest(**item) for item in response.get('Items', [])]
     except ClientError as e:
-        print(f"Error getting requests: {e}")
+        logger.error(f"Error getting requests: {e}")
         return []
 
 
@@ -59,7 +65,7 @@ def get_all_requests() -> List[ResidentRequest]:
         response = table.scan()
         return [ResidentRequest(**item) for item in response.get('Items', [])]
     except ClientError as e:
-        print(f"Error getting all requests: {e}")
+        logger.error(f"Error getting all requests: {e}")
         return []
 
 
@@ -72,11 +78,11 @@ def update_request_status(request_id: str, status: Status) -> bool:
             ExpressionAttributeNames={'#status': 'status'},
             ExpressionAttributeValues={
                 ':status': status.value,
-                ':updated_at': datetime.utcnow().isoformat()
+                ':updated_at': datetime.now(timezone.utc).isoformat()
             }
         )
         return True
     except ClientError as e:
-        print(f"Error updating request: {e}")
+        logger.error(f"Error updating request: {e}")
         return False
 

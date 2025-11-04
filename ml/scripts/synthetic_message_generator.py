@@ -2,12 +2,12 @@
 Synthetic Resident Message Generator - Ticket 2
 Generates realistic, freeform resident messages for development and testing.
 
-TODO (Ticket 2):
-- Generate messages covering all categories (Maintenance, Billing, Security, Deliveries, Amenities)
-- Include messages for "human escalation" intent
-- Each message includes: timestamp, resident_id, message_text, true_category
-- Output in both CSV and JSON formats
-- Generate at least 1,000 unique messages
+Features:
+- Generates messages covering all categories (Maintenance, Billing, Security, Deliveries, Amenities)
+- Includes messages for "human escalation" intent
+- Each message includes: timestamp, resident_id, message_text, true_category, urgency, intent, metadata
+- Outputs in both CSV and JSON formats
+- Generates 1,500 unique messages by default
 """
 import pandas as pd
 import json
