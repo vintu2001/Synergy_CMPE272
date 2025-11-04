@@ -8,31 +8,45 @@ TODO (Ticket 4):
 - Normalize text (lowercase, remove special characters)
 - Pass processed message to Classification Agent
 """
-from fastapi import APIRouter
+from fastapi import APIRouter, FastAPI
 from app.models.schemas import MessageRequest
+from dotenv import load_dotenv
+import boto3
+import json
+import uuid
 import re
+import os
+
+app = FastAPI()
+
+# Load environment variables from .env
+load_dotenv()
+
 
 router = APIRouter()
 
+# Read from .env
+REGION = os.getenv("AWS_REGION")
+SQS_URL = os.getenv("AWS_SQS_QUEUE_URL")
+DYNAMO_TABLE = os.getenv("AWS_DYNAMODB_TABLE_NAME")
 
-def normalize_text(text: str) -> str:
-    # TODO (Ticket 4): Keep minimal utility; normalize text before enqueueing
-    normalized = text.lower()
-    normalized = re.sub(r'\s+', ' ', normalized)
-    normalized = re.sub(r'[^a-z0-9\s.,!?]', '', normalized)
-    
-    return normalized.strip()
+# AWS clients
+sqs = boto3.client("sqs", region_name=REGION)
 
 
 @router.post("/submit-request")
 async def submit_request(request: MessageRequest):
-    # TODO (Ticket 4): Normalize, send to SQS, create DynamoDB record (status=Submitted), return request_id
-    
-    normalized_text = normalize_text(request.message_text)
-    
+    # Generate a unique request ID
+    request_id = str(uuid.uuid4())
+
+    # Send to SQS
+    payload = {"request_id": request_id, "message_text": request.message_text}
+    sqs.send_message(QueueUrl=SQS_URL, MessageBody=json.dumps(payload))
+
     return {
         "status": "submitted",
         "message": "Request submitted successfully!",
-        "request_id": "placeholder_request_id"
+        "request_id": request_id,
     }
-
+    
+app.include_router(router)
