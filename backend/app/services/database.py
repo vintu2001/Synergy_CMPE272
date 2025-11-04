@@ -1,11 +1,18 @@
-"""TODO (Ticket 6): Integrate DynamoDB (PK=request_id), implement create/get/query/update for requests"""
+"""
+Database Service - DynamoDB Integration
+Provides CRUD operations for resident requests stored in DynamoDB.
+"""
 import boto3
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
-from typing import Optional, List
-from datetime import datetime
+from typing import Optional, List, Dict, Any
+from datetime import datetime, timezone
+from decimal import Decimal
 from app.models.schemas import ResidentRequest, Status
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 dynamodb = boto3.resource(
     'dynamodb',
@@ -19,13 +26,34 @@ def get_table():
     return dynamodb.Table(TABLE_NAME)
 
 
+def convert_floats_to_decimal(obj: Any) -> Any:
+    """Recursively convert float values to Decimal and enums to strings for DynamoDB compatibility."""
+    if isinstance(obj, float):
+        return Decimal(str(obj))
+    elif hasattr(obj, 'value'):  # Handle Enum types
+        return obj.value
+    elif isinstance(obj, dict):
+        return {k: convert_floats_to_decimal(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_floats_to_decimal(item) for item in obj]
+    return obj
+
+
 def create_request(request: ResidentRequest) -> bool:
     try:
         table = get_table()
-        table.put_item(Item=request.dict())
+        # Convert the request to dict and convert floats to Decimal
+        item = request.dict()
+        item = convert_floats_to_decimal(item)
+        # Convert datetime objects to ISO format strings
+        if 'created_at' in item and isinstance(item['created_at'], datetime):
+            item['created_at'] = item['created_at'].isoformat()
+        if 'updated_at' in item and isinstance(item['updated_at'], datetime):
+            item['updated_at'] = item['updated_at'].isoformat()
+        table.put_item(Item=item)
         return True
     except ClientError as e:
-        print(f"Error creating request: {e}")
+        logger.error(f"Error creating request: {e}")
         return False
 
 
@@ -37,7 +65,7 @@ def get_request(request_id: str) -> Optional[ResidentRequest]:
             return ResidentRequest(**response['Item'])
         return None
     except ClientError as e:
-        print(f"Error getting request: {e}")
+        logger.error(f"Error getting request: {e}")
         return None
 
 
@@ -49,7 +77,7 @@ def get_requests_by_resident(resident_id: str) -> List[ResidentRequest]:
         )
         return [ResidentRequest(**item) for item in response.get('Items', [])]
     except ClientError as e:
-        print(f"Error getting requests: {e}")
+        logger.error(f"Error getting requests: {e}")
         return []
 
 
@@ -59,7 +87,7 @@ def get_all_requests() -> List[ResidentRequest]:
         response = table.scan()
         return [ResidentRequest(**item) for item in response.get('Items', [])]
     except ClientError as e:
-        print(f"Error getting all requests: {e}")
+        logger.error(f"Error getting all requests: {e}")
         return []
 
 
@@ -72,11 +100,11 @@ def update_request_status(request_id: str, status: Status) -> bool:
             ExpressionAttributeNames={'#status': 'status'},
             ExpressionAttributeValues={
                 ':status': status.value,
-                ':updated_at': datetime.utcnow().isoformat()
+                ':updated_at': datetime.now(timezone.utc).isoformat()
             }
         )
         return True
     except ClientError as e:
-        print(f"Error updating request: {e}")
+        logger.error(f"Error updating request: {e}")
         return False
 

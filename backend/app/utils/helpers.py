@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 def generate_request_id() -> str:
@@ -7,5 +7,5 @@ def generate_request_id() -> str:
 
 
 def get_current_timestamp() -> datetime:
-    return datetime.utcnow()
+    return datetime.now(timezone.utc)
 

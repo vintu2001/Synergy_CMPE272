@@ -1,22 +1,22 @@
-# Data Processing
-pandas==2.1.3
-numpy==1.26.2
+# Data Processing (Python 3.13 compatible)
+pandas>=2.2.0
+numpy>=1.26.0
 
 # Synthetic Data Generation
-faker==20.1.0
+faker>=20.1.0
 
 # Machine Learning
-scikit-learn==1.3.2
-xgboost==2.0.3
-statsmodels==0.14.0  # For ARIMA
+scikit-learn>=1.4.0
+xgboost>=2.0.3
+statsmodels>=0.14.0  # For ARIMA
 
 # Simulation
-simpy==4.1.1
+simpy>=4.1.1
 
 # Jupyter
-jupyter==1.0.0
-notebook==7.0.6
+jupyter>=1.0.0
+notebook>=7.0.6
 
 # Model Serialization
-joblib==1.3.2
+joblib>=1.3.2
 
