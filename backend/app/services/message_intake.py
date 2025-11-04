@@ -9,8 +9,19 @@ from app.agents.classification_agent import classify_message as classify_message
 from app.utils.helpers import generate_request_id
 from datetime import datetime, timezone
 import re
+import os
+import json
+import boto3
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Environment
+REGION = os.getenv("AWS_REGION")
+SQS_URL = os.getenv("AWS_SQS_QUEUE_URL")
+sqs = boto3.client("sqs", region_name=REGION) if SQS_URL else None
 
 
 def normalize_text(text: str) -> str:
@@ -25,10 +36,11 @@ def normalize_text(text: str) -> str:
 async def submit_request(request: MessageRequest):
     """
     Submit a resident request:
-    1. Normalize message text
-    2. Classify using classification agent
-    3. Create DynamoDB record with status=Submitted
-    4. Return request_id
+    - Normalize message text
+    - Classify using classification agent
+    - Create DynamoDB record with status=Submitted
+    - Enqueue to SQS if configured
+    - Return request_id
     """
     try:
         # Normalize text (kept for future processing hooks)
@@ -65,17 +77,32 @@ async def submit_request(request: MessageRequest):
         if not success:
             raise HTTPException(status_code=500, detail="Failed to save request to database")
         
+        # Enqueue event to SQS (optional, non-blocking)
+        if sqs and SQS_URL:
+            try:
+                payload = {
+                    "request_id": request_id,
+                    "resident_id": request.resident_id,
+                    "message_text": request.message_text,
+                    "category": final_category.value,
+                    "urgency": final_urgency.value,
+                    "intent": classification.intent.value,
+                    "submitted_at": now.isoformat(),
+                }
+                sqs.send_message(QueueUrl=SQS_URL, MessageBody=json.dumps(payload))
+            except Exception as sqs_error:
+                logger.warning(f"SQS enqueue failed (non-critical): {sqs_error}")
+        
         return {
             "status": "submitted",
             "message": "Request submitted successfully!",
             "request_id": request_id,
             "classification": {
-                "category": classification.category.value,
-                "urgency": classification.urgency.value,
+                "category": final_category.value,
+                "urgency": final_urgency.value,
                 "intent": classification.intent.value,
                 "confidence": classification.confidence
             }
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
-
