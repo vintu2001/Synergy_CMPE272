@@ -5,8 +5,9 @@ Provides CRUD operations for resident requests stored in DynamoDB.
 import boto3
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
+from decimal import Decimal
 from app.models.schemas import ResidentRequest, Status
 import os
 import logging
@@ -25,10 +26,31 @@ def get_table():
     return dynamodb.Table(TABLE_NAME)
 
 
+def convert_floats_to_decimal(obj: Any) -> Any:
+    """Recursively convert float values to Decimal and enums to strings for DynamoDB compatibility."""
+    if isinstance(obj, float):
+        return Decimal(str(obj))
+    elif hasattr(obj, 'value'):  # Handle Enum types
+        return obj.value
+    elif isinstance(obj, dict):
+        return {k: convert_floats_to_decimal(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_floats_to_decimal(item) for item in obj]
+    return obj
+
+
 def create_request(request: ResidentRequest) -> bool:
     try:
         table = get_table()
-        table.put_item(Item=request.dict())
+        # Convert the request to dict and convert floats to Decimal
+        item = request.dict()
+        item = convert_floats_to_decimal(item)
+        # Convert datetime objects to ISO format strings
+        if 'created_at' in item and isinstance(item['created_at'], datetime):
+            item['created_at'] = item['created_at'].isoformat()
+        if 'updated_at' in item and isinstance(item['updated_at'], datetime):
+            item['updated_at'] = item['updated_at'].isoformat()
+        table.put_item(Item=item)
         return True
     except ClientError as e:
         logger.error(f"Error creating request: {e}")

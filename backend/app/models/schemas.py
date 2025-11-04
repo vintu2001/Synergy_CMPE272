@@ -40,6 +40,8 @@ class MessageRequest(BaseModel):
     resident_id: str = Field(..., description="Resident identifier")
     message_text: str = Field(..., description="Freeform text message from resident")
     timestamp: Optional[datetime] = Field(default_factory=datetime.now)
+    category: Optional[IssueCategory] = Field(None, description="Optional category override")
+    urgency: Optional[Urgency] = Field(None, description="Optional urgency override")
 
 
 class ClassificationResponse(BaseModel):
