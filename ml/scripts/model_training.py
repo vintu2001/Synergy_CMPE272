@@ -10,8 +10,20 @@ Output:
     - ml/models/label_encoders.pkl
     - ml/models/feature_columns.pkl
     - ml/models/model_metadata.json
+Model Training Script
+Trains ML model to predict issue recurrence and risk scores.
+
+Usage:
+    python ml/scripts/model_training.py
+    
+Output:
+    - ml/models/risk_prediction_model.pkl
+    - ml/models/label_encoders.pkl
+    - ml/models/feature_columns.pkl
+    - ml/models/model_metadata.json
 """
 import pandas as pd
+import numpy as np
 import numpy as np
 from pathlib import Path
 import json
@@ -27,7 +39,6 @@ warnings.filterwarnings('ignore')
 
 def load_and_prepare_data(data_path: Path) -> pd.DataFrame:
     """Load synthetic messages and extract features."""
-    print(f"Loading data from {data_path}...")
     df = pd.read_csv(data_path)
     
     import ast
@@ -50,14 +61,11 @@ def load_and_prepare_data(data_path: Path) -> pd.DataFrame:
     )
     df['is_recurring_category'] = df['resident_category_count'] > 1
     
-    print(f"✓ Loaded {len(df)} messages")
     return df
 
 
 def calculate_risk_scores(df: pd.DataFrame) -> pd.DataFrame:
     """Calculate risk score target variable."""
-    print("Calculating risk scores...")
-    
     def calc_risk(row):
         score = 0.0
         urgency_map = {'High': 0.8, 'Medium': 0.5, 'Low': 0.2}
@@ -84,14 +92,11 @@ def calculate_risk_scores(df: pd.DataFrame) -> pd.DataFrame:
         return min(max(score, 0.0), 1.0)
     
     df['risk_score'] = df.apply(calc_risk, axis=1)
-    print(f"✓ Risk scores calculated (mean: {df['risk_score'].mean():.3f})")
     return df
 
 
 def engineer_features(df: pd.DataFrame) -> tuple:
     """Create features and encode categoricals."""
-    print("Engineering features...")
-    
     # Text features
     df['message_length'] = df['message_text'].str.len()
     df['word_count'] = df['message_text'].str.split().str.len()
@@ -127,14 +132,11 @@ def engineer_features(df: pd.DataFrame) -> tuple:
     for col in bool_cols:
         df[col] = df[col].astype(int)
     
-    print(f"✓ Features engineered")
     return df, label_encoders
 
 
 def train_model(df: pd.DataFrame, label_encoders: dict) -> tuple:
     """Train XGBoost model."""
-    print("\nTraining XGBoost model...")
-    
     feature_columns = [
         'category_encoded', 'urgency_encoded', 'intent_encoded',
         'message_length', 'word_count', 'has_urgent_keywords',
@@ -152,9 +154,6 @@ def train_model(df: pd.DataFrame, label_encoders: dict) -> tuple:
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42
     )
-    
-    print(f"Training set: {len(X_train)} samples")
-    print(f"Test set: {len(X_test)} samples")
     
     # Train model
     model = xgb.XGBRegressor(
@@ -184,15 +183,6 @@ def train_model(df: pd.DataFrame, label_encoders: dict) -> tuple:
     train_rmse = np.sqrt(mean_squared_error(y_train, y_train_pred))
     test_rmse = np.sqrt(mean_squared_error(y_test, y_test_pred))
     
-    print(f"\n{'='*60}")
-    print("MODEL PERFORMANCE")
-    print(f"{'='*60}")
-    print(f"Training MAE:  {train_mae:.4f}")
-    print(f"Test MAE:      {test_mae:.4f}")
-    print(f"Training RMSE: {train_rmse:.4f}")
-    print(f"Test RMSE:     {test_rmse:.4f}")
-    print(f"{'='*60}\n")
-    
     return model, feature_columns, (train_mae, test_mae, train_rmse, test_rmse)
 
 
@@ -200,22 +190,17 @@ def save_model_artifacts(model, feature_columns, label_encoders, metrics, output
     """Save trained model and metadata."""
     output_dir.mkdir(exist_ok=True, parents=True)
     
-    print(f"Saving model artifacts to {output_dir}...")
-    
     # Save model
     model_path = output_dir / 'risk_prediction_model.pkl'
     joblib.dump(model, model_path)
-    print(f"✓ Model saved: {model_path}")
     
     # Save encoders
     encoders_path = output_dir / 'label_encoders.pkl'
     joblib.dump(label_encoders, encoders_path)
-    print(f"✓ Encoders saved: {encoders_path}")
     
     # Save features
     features_path = output_dir / 'feature_columns.pkl'
     joblib.dump(feature_columns, features_path)
-    print(f"✓ Features saved: {features_path}")
     
     # Save metadata
     train_mae, test_mae, train_rmse, test_rmse = metrics
@@ -243,7 +228,6 @@ def save_model_artifacts(model, feature_columns, label_encoders, metrics, output
     metadata_path = output_dir / 'model_metadata.json'
     with open(metadata_path, 'w') as f:
         json.dump(metadata, f, indent=2)
-    print(f"✓ Metadata saved: {metadata_path}")
 
 
 def train_risk_prediction_model(data_path: Path, output_dir: Path):
@@ -254,10 +238,6 @@ def train_risk_prediction_model(data_path: Path, output_dir: Path):
         data_path: Path to synthetic_messages.csv
         output_dir: Directory to save model artifacts
     """
-    print("="*60)
-    print("TICKET 8: RISK PREDICTION MODEL TRAINING")
-    print("="*60)
-    
     # Load data
     df = load_and_prepare_data(data_path)
     
@@ -272,31 +252,15 @@ def train_risk_prediction_model(data_path: Path, output_dir: Path):
     
     # Save artifacts
     save_model_artifacts(model, feature_columns, label_encoders, metrics, output_dir)
-    
-    print("\n" + "="*60)
-    print("✅ TRAINING COMPLETE")
-    print("="*60)
-    print(f"\nNext steps:")
-    print("1. Review model performance (MAE < 0.10 is good)")
-    print("2. Copy artifacts to backend/app/ml_models/")
-    print("3. Update backend/app/agents/risk_prediction_agent.py")
-    print("4. Test with: curl -X POST http://localhost:8000/api/v1/predict-risk")
-    print("\nSee docs/TICKET_8_9_IMPLEMENTATION_GUIDE.md for details")
 
 
 if __name__ == "__main__":
-    # Paths
     project_root = Path(__file__).parent.parent.parent
     data_path = project_root / "ml/data/synthetic_messages.csv"
     output_dir = project_root / "ml/models"
     
-    # Check data exists
     if not data_path.exists():
-        print(f"❌ Data file not found: {data_path}")
-        print("\nGenerate synthetic data first:")
-        print("  python ml/scripts/synthetic_message_generator.py")
-        exit(1)
+        raise FileNotFoundError(f"Data file not found: {data_path}. Generate it first with synthetic_message_generator.py")
     
-    # Train model
     train_risk_prediction_model(data_path, output_dir)
 

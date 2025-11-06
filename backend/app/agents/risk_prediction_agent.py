@@ -5,11 +5,13 @@ Uses trained ML model to predict issue recurrence and risk scores.
 import joblib
 import pandas as pd
 import numpy as np
+import logging
 from pathlib import Path
 from datetime import datetime
 from fastapi import APIRouter, HTTPException
 from app.models.schemas import ClassificationResponse, RiskPredictionResponse
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 _model_cache = {
@@ -35,8 +37,9 @@ def load_model_artifacts():
         with open(models_dir / 'model_metadata.json', 'r') as f:
             _model_cache['metadata'] = json.load(f)
         
-        print(f"✅ ML Model loaded: Test MAE = {_model_cache['metadata']['metrics']['test_mae']:.4f}")
+        logger.info(f"ML Model loaded successfully (Test MAE: {_model_cache['metadata']['metrics']['test_mae']:.4f})")
     except Exception as e:
+        logger.error(f"Failed to load ML model artifacts: {e}")
         raise RuntimeError(f"Failed to load ML model artifacts: {e}")
 
 
@@ -107,6 +110,33 @@ def engineer_features(classification: ClassificationResponse) -> pd.DataFrame:
 
 @router.post("/predict-risk", response_model=RiskPredictionResponse)
 async def predict_risk(classification: ClassificationResponse) -> RiskPredictionResponse:
+    """
+    Predict risk score and recurrence probability for a classified message.
+    Returns risk_forecast ∈ [0,1] and recurrence_probability.
+    """
+    try:
+        load_model_artifacts()
+        
+        feature_df = engineer_features(classification)
+        
+        model = _model_cache['model']
+        risk_forecast = float(model.predict(feature_df)[0])
+        
+        risk_forecast = np.clip(risk_forecast, 0.0, 1.0)
+        
+        recurrence_probability = risk_forecast * 0.7
+        
+        return RiskPredictionResponse(
+            risk_forecast=risk_forecast,
+            recurrence_probability=recurrence_probability
+        )
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Risk prediction failed: {str(e)}"
+        )
+
     """
     Predict risk score and recurrence probability for a classified message.
     Returns risk_forecast ∈ [0,1] and recurrence_probability.
