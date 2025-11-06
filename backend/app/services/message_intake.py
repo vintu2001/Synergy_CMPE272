@@ -1,11 +1,13 @@
 """
-Message Intake Service - Ticket 4
-Ingests raw messages, cleans them, and queues them for classification.
+Message Intake Service
+Ingests resident messages, classifies them, predicts risk scores, generates resolution options, and stores in database.
 """
 from fastapi import APIRouter, HTTPException
-from app.models.schemas import MessageRequest, Status, ResidentRequest
+from app.models.schemas import MessageRequest, Status, ResidentRequest, ClassificationResponse, SimulationResponse
 from app.services.database import create_request
 from app.agents.classification_agent import classify_message as classify_message_endpoint
+from app.agents.risk_prediction_agent import predict_risk
+from app.agents.simulation_agent import simulator
 from app.utils.helpers import generate_request_id
 from datetime import datetime, timezone
 import re
@@ -35,49 +37,87 @@ def normalize_text(text: str) -> str:
 @router.post("/submit-request")
 async def submit_request(request: MessageRequest):
     """
-    Submit a resident request:
-    - Normalize message text
-    - Classify using classification agent
-    - Create DynamoDB record with status=Submitted
-    - Enqueue to SQS if configured
-    - Return request_id
+    Submit a resident request with automatic classification, risk prediction, and resolution simulation.
     """
     try:
-        # Normalize text (kept for future processing hooks)
         _normalized_text = normalize_text(request.message_text)
         
-        # Classify the message (only if no overrides provided)
+        # Step 1: Classification
         classification = await classify_message_endpoint(request)
         
-        # Use user overrides if provided, otherwise use AI classification
         final_category = request.category if request.category else classification.category
         final_urgency = request.urgency if request.urgency else classification.urgency
         
-        # Generate request ID
+        # Step 2: Risk Prediction
+        risk_result = None
+        risk_score = None
+        try:
+            classification_for_risk = ClassificationResponse(
+                category=final_category,
+                urgency=final_urgency,
+                intent=classification.intent,
+                confidence=classification.confidence,
+                message_text=request.message_text
+            )
+            risk_result = await predict_risk(classification_for_risk)
+            risk_score = risk_result.risk_forecast
+            logger.info(f"Risk prediction successful: {risk_score:.4f}")
+        except Exception as risk_error:
+            logger.warning(f"Risk prediction failed (non-critical): {risk_error}")
+        
+        # Step 3: Simulation - Generate resolution options
+        simulation_result = None
+        simulated_options = None
+        try:
+            simulation_options = simulator.generate_options(
+                category=final_category,
+                urgency=final_urgency,
+                risk_score=risk_score if risk_score is not None else 0.5
+            )
+            
+            # Convert to dict for storage
+            simulated_options = [
+                {
+                    "option_id": opt.option_id,
+                    "action": opt.action,
+                    "estimated_cost": opt.estimated_cost,
+                    "time_to_resolution": opt.time_to_resolution,
+                    "resident_satisfaction_impact": opt.resident_satisfaction_impact
+                }
+                for opt in simulation_options
+            ]
+            
+            simulation_result = SimulationResponse(
+                options=simulation_options,
+                issue_id=f"sim_{final_category.value}_{final_urgency.value}"
+            )
+            logger.info(f"Simulation generated {len(simulated_options)} options")
+        except Exception as sim_error:
+            logger.warning(f"Simulation failed (non-critical): {sim_error}")
+        
         request_id = generate_request_id()
         now = datetime.now(timezone.utc)
         
-        # Create ResidentRequest object
         resident_request = ResidentRequest(
             request_id=request_id,
             resident_id=request.resident_id,
             message_text=request.message_text,
             category=final_category,
             urgency=final_urgency,
-            intent=classification.intent,  # Intent is always from AI
+            intent=classification.intent,
             status=Status.SUBMITTED,
+            risk_forecast=risk_score,
             classification_confidence=classification.confidence,
+            simulated_options=simulated_options,  # NEW: Store simulation results
             created_at=now,
             updated_at=now
         )
         
-        # Save to DynamoDB
         success = create_request(resident_request)
         
         if not success:
             raise HTTPException(status_code=500, detail="Failed to save request to database")
         
-        # Enqueue event to SQS (optional, non-blocking)
         if sqs and SQS_URL:
             try:
                 payload = {
@@ -87,13 +127,15 @@ async def submit_request(request: MessageRequest):
                     "category": final_category.value,
                     "urgency": final_urgency.value,
                     "intent": classification.intent.value,
+                    "risk_forecast": risk_score,
+                    "simulated_options": simulated_options,
                     "submitted_at": now.isoformat(),
                 }
                 sqs.send_message(QueueUrl=SQS_URL, MessageBody=json.dumps(payload))
             except Exception as sqs_error:
                 logger.warning(f"SQS enqueue failed (non-critical): {sqs_error}")
         
-        return {
+        response_data = {
             "status": "submitted",
             "message": "Request submitted successfully!",
             "request_id": request_id,
@@ -102,7 +144,20 @@ async def submit_request(request: MessageRequest):
                 "urgency": final_urgency.value,
                 "intent": classification.intent.value,
                 "confidence": classification.confidence
-            }
+            },
+            "risk_assessment": {
+                "risk_forecast": risk_score,
+                "risk_level": "High" if risk_score and risk_score > 0.7 else "Medium" if risk_score and risk_score > 0.3 else "Low" if risk_score else "Unknown"
+            } if risk_score is not None else None
         }
+        
+        # Add simulation results if available
+        if simulation_result:
+            response_data["simulation"] = {
+                "options_generated": len(simulation_result.options),
+                "options": simulated_options
+            }
+        
+        return response_data
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")

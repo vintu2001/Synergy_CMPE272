@@ -16,6 +16,13 @@ requests==2.32.3
 google-generativeai==0.8.3
 # huggingface-hub==0.19.4  # Uncomment if using Hugging Face
 
+# ML Libraries (Ticket 8 & 9)
+xgboost==3.1.1
+scikit-learn==1.7.2
+pandas==2.3.3
+numpy==2.3.4
+joblib==1.5.2
+
 # Database
 # dynamodb-json==1.3.0  # For DynamoDB operations
 
