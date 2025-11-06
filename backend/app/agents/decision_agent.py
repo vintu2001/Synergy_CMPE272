@@ -20,9 +20,11 @@ async def make_decision(
     classification: ClassificationResponse,
     simulation: SimulationResponse
 ) -> DecisionResponse:
-    # TODO (Ticket 13): If intent==human_escalation → call alert API; else score options (urgency>cost>satisfaction), log choice
+    """
+    TODO (Ticket 13): Integrate risk scores into decision logic.
+    If intent==human_escalation → escalate; else score options by urgency, cost, satisfaction.
+    """
     
-    # Placeholder implementation
     if classification.intent == Intent.HUMAN_ESCALATION:
         return DecisionResponse(
             chosen_action="Escalate to On-Call Manager",
@@ -31,13 +33,12 @@ async def make_decision(
             alternatives_considered=[]
         )
     
-    # Simple scoring: prioritize urgency, then satisfaction, then lower cost
     best_option = max(
         simulation.options,
         key=lambda opt: (
-            3.0 if classification.urgency.value == "High" else 1.0,  # Urgency weight
+            3.0 if classification.urgency.value == "High" else 1.0,
             opt.resident_satisfaction_impact,
-            -opt.estimated_cost  # Negative for lower cost = higher score
+            -opt.estimated_cost
         )
     )
     

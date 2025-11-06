@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getAllRequests } from "../services/api";
 import LoadingSpinner from "../components/LoadingSpinner";
 import StatusBadge from "../components/StatusBadge";
-import { Shield, Search, Filter, RefreshCw, Download, Eye, EyeOff, Key } from "lucide-react";
+import { Shield, Search, Filter, RefreshCw, Eye, EyeOff, Key, ChevronDown, ChevronRight, DollarSign, Clock, Heart } from "lucide-react";
 
 export default function AdminDashboard() {
   const [apiKey, setApiKey] = useState(localStorage.getItem("admin_api_key") || "");
@@ -16,6 +16,7 @@ export default function AdminDashboard() {
   const [status, setStatus] = useState("All");
   const [sortField, setSortField] = useState("created_at");
   const [sortDir, setSortDir] = useState("desc");
+  const [expandedRow, setExpandedRow] = useState(null);
 
   async function load() {
     if (!apiKey) return;
@@ -256,60 +257,160 @@ export default function AdminDashboard() {
                       Risk
                     </th>
                     <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
+                      Options
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
                       Created
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
+                      Details
                     </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
                   {sorted.map((r) => (
-                    <tr key={r.request_id} className="transition-colors hover:bg-blue-50">
-                      <td className="whitespace-nowrap px-6 py-4">
-                        <code className="rounded bg-gray-100 px-2 py-1 text-xs font-mono text-gray-800">
-                          {r.request_id}
-                        </code>
-                      </td>
-                      <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
-                        {r.resident_id}
-                      </td>
-                      <td className="whitespace-nowrap px-6 py-4">
-                        <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-800">
-                          {r.category}
-                        </span>
-                      </td>
-                      <td className="whitespace-nowrap px-6 py-4">
-                        <span
-                          className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                            r.urgency === "High"
-                              ? "bg-red-100 text-red-800"
-                              : r.urgency === "Medium"
-                              ? "bg-yellow-100 text-yellow-800"
-                              : "bg-blue-100 text-blue-800"
-                          }`}
-                        >
-                          {r.urgency}
-                        </span>
-                      </td>
-                      <td className="whitespace-nowrap px-6 py-4">
-                        <StatusBadge status={r.status} />
-                      </td>
-                      <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
-                        {r.classification_confidence != null ? (
-                          <span className="font-semibold">{Math.round(r.classification_confidence * 100)}%</span>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </td>
-                      <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
-                        {r.risk_forecast != null ? (
-                          <span className="font-semibold">{Math.round(r.risk_forecast * 100)}%</span>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </td>
-                      <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
-                        {new Date(r.created_at).toLocaleString()}
-                      </td>
-                    </tr>
+                    <>
+                      <tr key={r.request_id} className="transition-colors hover:bg-blue-50">
+                        <td className="whitespace-nowrap px-6 py-4">
+                          <code className="rounded bg-gray-100 px-2 py-1 text-xs font-mono text-gray-800">
+                            {r.request_id}
+                          </code>
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
+                          {r.resident_id}
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-4">
+                          <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-800">
+                            {r.category}
+                          </span>
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-4">
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                              r.urgency === "High"
+                                ? "bg-red-100 text-red-800"
+                                : r.urgency === "Medium"
+                                ? "bg-yellow-100 text-yellow-800"
+                                : "bg-blue-100 text-blue-800"
+                            }`}
+                          >
+                            {r.urgency}
+                          </span>
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-4">
+                          <StatusBadge status={r.status} />
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
+                          {r.classification_confidence != null ? (
+                            <span className="font-semibold">{Math.round(r.classification_confidence * 100)}%</span>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
+                          {r.risk_forecast != null ? (
+                            <span className={`font-semibold ${r.risk_forecast > 0.7 ? 'text-red-600' : r.risk_forecast > 0.3 ? 'text-yellow-600' : 'text-green-600'}`}>
+                              {Math.round(r.risk_forecast * 100)}%
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
+                          {r.simulated_options?.length > 0 ? (
+                            <span className="rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-800">
+                              {r.simulated_options.length} options
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
+                          {new Date(r.created_at).toLocaleString()}
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-4">
+                          <button
+                            onClick={() => setExpandedRow(expandedRow === r.request_id ? null : r.request_id)}
+                            className="text-blue-600 hover:text-blue-800 transition-colors"
+                          >
+                            {expandedRow === r.request_id ? (
+                              <ChevronDown className="h-5 w-5" />
+                            ) : (
+                              <ChevronRight className="h-5 w-5" />
+                            )}
+                          </button>
+                        </td>
+                      </tr>
+                      {expandedRow === r.request_id && (
+                        <tr key={`${r.request_id}-details`}>
+                          <td colSpan="10" className="bg-gradient-to-r from-blue-50 to-purple-50 px-6 py-6">
+                            <div className="space-y-4">
+                              {/* Message */}
+                              <div className="rounded-lg bg-white p-4 shadow">
+                                <h4 className="mb-2 text-sm font-semibold text-gray-700">Original Message</h4>
+                                <p className="text-sm text-gray-900">{r.message_text}</p>
+                              </div>
+
+                              {/* Simulation Options */}
+                              {r.simulated_options && r.simulated_options.length > 0 && (
+                                <div>
+                                  <h4 className="mb-3 text-sm font-semibold text-gray-700">
+                                    🎯 Simulated Resolution Options
+                                  </h4>
+                                  <div className="grid gap-4 md:grid-cols-3">
+                                    {r.simulated_options.map((opt, idx) => (
+                                      <div
+                                        key={opt.option_id}
+                                        className="rounded-lg bg-white p-4 shadow-md transition-all hover:shadow-lg"
+                                      >
+                                        <div className="mb-3 flex items-center gap-2">
+                                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-r from-blue-500 to-purple-500 text-xs font-bold text-white">
+                                            {idx + 1}
+                                          </span>
+                                          <span className="text-xs font-semibold text-gray-500">
+                                            {opt.option_id}
+                                          </span>
+                                        </div>
+                                        <h5 className="mb-3 text-sm font-bold text-gray-900">{opt.action}</h5>
+                                        <div className="space-y-2">
+                                          <div className="flex items-center justify-between text-xs">
+                                            <span className="flex items-center gap-1 text-gray-600">
+                                              <DollarSign className="h-3 w-3" />
+                                              Cost
+                                            </span>
+                                            <span className="font-semibold text-green-600">
+                                              ${opt.estimated_cost.toFixed(2)}
+                                            </span>
+                                          </div>
+                                          <div className="flex items-center justify-between text-xs">
+                                            <span className="flex items-center gap-1 text-gray-600">
+                                              <Clock className="h-3 w-3" />
+                                              Time
+                                            </span>
+                                            <span className="font-semibold text-blue-600">
+                                              {opt.time_to_resolution.toFixed(1)}h
+                                            </span>
+                                          </div>
+                                          <div className="flex items-center justify-between text-xs">
+                                            <span className="flex items-center gap-1 text-gray-600">
+                                              <Heart className="h-3 w-3" />
+                                              Satisfaction
+                                            </span>
+                                            <span className="font-semibold text-red-600">
+                                              {(opt.resident_satisfaction_impact * 100).toFixed(0)}%
+                                            </span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
                   ))}
                 </tbody>
               </table>

@@ -49,6 +49,8 @@ class ClassificationResponse(BaseModel):
     urgency: Urgency
     intent: Intent
     confidence: float = Field(..., ge=0.0, le=1.0)
+    message_text: Optional[str] = Field(None, description="Original message text for risk prediction")
+
 
 
 class RiskPredictionResponse(BaseModel):
@@ -86,7 +88,9 @@ class ResidentRequest(BaseModel):
     status: Status
     risk_forecast: Optional[float] = None
     classification_confidence: Optional[float] = None
+    simulated_options: Optional[List[Dict]] = None  # Store all simulation options
     chosen_action: Optional[str] = None
+    chosen_option_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
