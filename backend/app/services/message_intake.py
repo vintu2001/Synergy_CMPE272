@@ -214,7 +214,7 @@ async def submit_request(request: MessageRequest):
                 
                 # Update request status based on execution
                 new_status = Status.ESCALATED if decision_result.escalation_reason else Status.IN_PROGRESS
-                await update_request_status(request_id, new_status)
+                update_request_status(request_id, new_status)
                 
                 # Add decision and execution results to response
                 response_data["decision"] = {
