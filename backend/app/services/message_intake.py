@@ -3,11 +3,17 @@ Message Intake Service
 Ingests resident messages, classifies them, predicts risk scores, generates resolution options, and stores in database.
 """
 from fastapi import APIRouter, HTTPException
-from app.models.schemas import MessageRequest, Status, ResidentRequest, ClassificationResponse, SimulationResponse
-from app.services.database import create_request
+from app.models.schemas import (
+    MessageRequest, Status, ResidentRequest, ClassificationResponse, 
+    SimulationResponse, PolicyWeights, PolicyConfiguration, DecisionResponse,
+    DecisionRequest
+)
+from app.services.database import create_request, update_request_status
 from app.agents.classification_agent import classify_message as classify_message_endpoint
 from app.agents.risk_prediction_agent import predict_risk
 from app.agents.simulation_agent import simulator
+from app.agents.decision_agent import make_decision
+from app.services.execution_layer import execute_decision
 from app.utils.helpers import generate_request_id
 from datetime import datetime, timezone
 import re
@@ -157,6 +163,42 @@ async def submit_request(request: MessageRequest):
                 "options_generated": len(simulation_result.options),
                 "options": simulated_options
             }
+            
+            # Step 4: Decision Making
+            try:
+                decision_request = DecisionRequest(
+                    classification=classification,
+                    simulation=simulation_result,
+                    weights=PolicyWeights(),  # Use default weights
+                    config=PolicyConfiguration()  # Use default configuration
+                )
+                decision_result = await make_decision(request=decision_request)
+                
+                # Step 5: Execute Decision
+                execution_result = await execute_decision(
+                    decision=decision_result,
+                    category=final_category
+                )
+                
+                # Update request status based on execution
+                new_status = Status.ESCALATED if decision_result.escalation_reason else Status.IN_PROGRESS
+                await update_request_status(request_id, new_status)
+                
+                # Add decision and execution results to response
+                response_data["decision"] = {
+                    "chosen_action": decision_result.chosen_action,
+                    "reasoning": decision_result.reasoning,
+                    "policy_scores": decision_result.policy_scores
+                }
+                response_data["execution"] = execution_result
+                
+                logger.info(f"Decision executed successfully: {decision_result.chosen_action}")
+                
+            except Exception as decision_error:
+                logger.error(f"Decision/execution failed: {decision_error}")
+                # Don't fail the request if decision/execution fails
+                response_data["decision_status"] = "failed"
+                response_data["decision_error"] = str(decision_error)
         
         return response_data
     except Exception as e:

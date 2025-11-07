@@ -67,3 +67,20 @@ async def send_billing_notification(decision: DecisionResponse):
         "message": "Billing notification sent successfully"
     }
 
+async def execute_decision(decision: DecisionResponse, category: IssueCategory) -> dict:
+    """Execute a decision based on the issue category."""
+    
+    # Route the decision to the appropriate execution endpoint
+    if decision.escalation_reason:
+        return await alert_on_call_manager(decision)
+        
+    if category == IssueCategory.MAINTENANCE:
+        return await dispatch_maintenance(decision)
+    elif category == IssueCategory.DELIVERIES:
+        return await reroute_package(decision)
+    elif category == IssueCategory.BILLING:
+        return await send_billing_notification(decision)
+    else:
+        # Default to maintenance for other categories
+        return await dispatch_maintenance(decision)
+
