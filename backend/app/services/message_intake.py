@@ -195,6 +195,42 @@ async def submit_request(request: MessageRequest):
                     )
                 except Exception as e:
                     logger.warning(f"Failed to update recommended option: {e}")
+            
+            # Step 4: Decision Making
+            try:
+                decision_request = DecisionRequest(
+                    classification=classification,
+                    simulation=simulation_result,
+                    weights=PolicyWeights(),  # Use default weights
+                    config=PolicyConfiguration()  # Use default configuration
+                )
+                decision_result = await make_decision(request=decision_request)
+                
+                # Step 5: Execute Decision
+                execution_result = await execute_decision(
+                    decision=decision_result,
+                    category=final_category
+                )
+                
+                # Update request status based on execution
+                new_status = Status.ESCALATED if decision_result.escalation_reason else Status.IN_PROGRESS
+                await update_request_status(request_id, new_status)
+                
+                # Add decision and execution results to response
+                response_data["decision"] = {
+                    "chosen_action": decision_result.chosen_action,
+                    "reasoning": decision_result.reasoning,
+                    "policy_scores": decision_result.policy_scores
+                }
+                response_data["execution"] = execution_result
+                
+                logger.info(f"Decision executed successfully: {decision_result.chosen_action}")
+                
+            except Exception as decision_error:
+                logger.error(f"Decision/execution failed: {decision_error}")
+                # Don't fail the request if decision/execution fails
+                response_data["decision_status"] = "failed"
+                response_data["decision_error"] = str(decision_error)
         
         return response_data
     except Exception as e:
