@@ -4,7 +4,7 @@ import { classifyMessage, submitRequest, selectOption } from "../services/api";
 import { useUser } from "../context/UserContext";
 import LoadingSpinner from "../components/LoadingSpinner";
 import Toast from "../components/Toast";
-import { AlertCircle, CheckCircle2, Clock, Layers, Send, Settings2, ShieldCheck, SlidersHorizontal, User, UserX } from "lucide-react";
+import { Sparkles, Send, AlertCircle, CheckCircle2, Clock, Zap, DollarSign, Heart, Star, UserX } from "lucide-react";
 
 const categoryStyles = {
   Maintenance: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-200",
@@ -41,6 +41,10 @@ export default function ResidentSubmission() {
   const [submittedResult, setSubmittedResult] = useState(null);
   const [selectingOption, setSelectingOption] = useState(false);
   const debounceRef = useRef(null);
+  
+  // NEW: State for option selection flow
+  const [submittedResult, setSubmittedResult] = useState(null); // Stores result after submit
+  const [selectingOption, setSelectingOption] = useState(false); // Loading state for option selection
 
   const charCount = useMemo(() => messageText.length || 0, [messageText]);
 
@@ -94,13 +98,46 @@ export default function ResidentSubmission() {
       const category = watch("category") || analysis?.category;
       const urgency = watch("urgency") || analysis?.urgency;
       const result = await submitRequest(residentId, messageText, category, urgency);
+      
+      // NEW: Store result and show option selection (instead of immediate reset)
       setSubmittedResult(result);
-      setToast({ message: "Request logged! Choose your preferred resolution option.", type: "success" });
+      setToast({
+        message: `Request classified! Please select a resolution option.`,
+        type: "success",
+      });
     } catch (e) {
       setToast({ message: e.response?.data?.detail || "Unable to submit request. Please try again.", type: "error" });
       setError(e.response?.data?.detail || "Failed to submit request.");
     } finally {
       setSubmitting(false);
+    }
+  };
+  
+  // NEW: Handle option selection
+  const handleSelectOption = async (optionId) => {
+    if (!submittedResult) return;
+    
+    setSelectingOption(true);
+    try {
+      const result = await selectOption(submittedResult.request_id, optionId);
+      setToast({
+        message: `Option selected successfully! Your request is now being processed.`,
+        type: "success",
+      });
+      
+      // Reset form after option selection
+      setTimeout(() => {
+        reset();
+        setAnalysis(null);
+        setSubmittedResult(null);
+      }, 2000);
+    } catch (e) {
+      setToast({ 
+        message: "Failed to select option. Please try again.", 
+        type: "error" 
+      });
+    } finally {
+      setSelectingOption(false);
     }
   };
 
@@ -364,7 +401,149 @@ export default function ResidentSubmission() {
             </div>
           )}
         </div>
-      </section>
+        
+        {/* NEW: Option Selection Panel */}
+        {submittedResult && submittedResult.simulation?.options && (
+          <div className="mt-8">
+            <div className="rounded-2xl bg-gradient-to-br from-green-50 to-blue-50 p-8 shadow-2xl">
+              <div className="mb-6 text-center">
+                <CheckCircle2 className="mx-auto mb-3 h-12 w-12 text-green-600" />
+                <h2 className="mb-2 text-2xl font-bold text-gray-900">Request Classified Successfully!</h2>
+                <p className="text-gray-600">
+                  Please choose how you'd like us to resolve your issue:
+                </p>
+                <div className="mt-4 inline-flex items-center gap-3 text-sm">
+                  <span className="font-semibold text-gray-700">
+                    Category: {submittedResult.classification.category}
+                  </span>
+                  <span className="text-gray-400">•</span>
+                  <span className="font-semibold text-gray-700">
+                    Urgency: {submittedResult.classification.urgency}
+                  </span>
+                  {submittedResult.risk_assessment && (
+                    <>
+                      <span className="text-gray-400">•</span>
+                      <span className="font-semibold text-gray-700">
+                        Risk: {submittedResult.risk_assessment.risk_level}
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid gap-6 md:grid-cols-4">
+                {submittedResult.simulation.options.map((option) => {
+                  const isRecommended = option.option_id === submittedResult.simulation.recommended_option_id;
+                  return (
+                    <div
+                      key={option.option_id}
+                      className={`relative rounded-xl bg-white p-6 shadow-lg transition-all hover:shadow-2xl ${
+                        isRecommended ? "ring-4 ring-yellow-400" : ""
+                      }`}
+                    >
+                      {isRecommended && (
+                        <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-yellow-400 to-orange-400 px-3 py-1 text-xs font-bold text-white shadow-lg">
+                            <Star className="h-3 w-3 fill-current" />
+                            RECOMMENDED
+                          </span>
+                        </div>
+                      )}
+
+                      <h3 className="mb-4 text-lg font-bold text-gray-900">{option.action}</h3>
+
+                      <div className="mb-6 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="flex items-center gap-2 text-sm text-gray-600">
+                            <DollarSign className="h-4 w-4 text-green-600" />
+                            Cost
+                          </span>
+                          <span className="font-semibold text-gray-900">
+                            ${parseFloat(option.estimated_cost || 0).toFixed(2)}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <span className="flex items-center gap-2 text-sm text-gray-600">
+                            <Clock className="h-4 w-4 text-blue-600" />
+                            Time
+                          </span>
+                          <span className="font-semibold text-gray-900">
+                            {parseFloat(option.time_to_resolution || 0).toFixed(1)}h
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <span className="flex items-center gap-2 text-sm text-gray-600">
+                            <Heart className="h-4 w-4 text-red-500" />
+                            Satisfaction
+                          </span>
+                          <span className="font-semibold text-gray-900">
+                            {(parseFloat(option.resident_satisfaction_impact || 0) * 100).toFixed(0)}%
+                          </span>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => handleSelectOption(option.option_id)}
+                        disabled={selectingOption}
+                        className={`w-full rounded-lg px-4 py-3 font-semibold text-white shadow-md transition-all hover:shadow-lg disabled:opacity-50 ${
+                          isRecommended
+                            ? "bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600"
+                            : "bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600"
+                        }`}
+                      >
+                        {selectingOption ? "Processing..." : "Select This Option"}
+                      </button>
+                    </div>
+                  );
+                })}
+                
+                {/* Escalate to Human Option */}
+                <div className="relative rounded-xl border-2 border-red-300 bg-gradient-to-br from-red-50 to-orange-50 p-6 shadow-lg transition-all hover:shadow-2xl">
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-red-500 to-orange-500 px-3 py-1 text-xs font-bold text-white shadow-lg">
+                      <UserX className="h-3 w-3" />
+                      ESCALATE
+                    </span>
+                  </div>
+
+                  <h3 className="mb-4 text-lg font-bold text-gray-900">Talk to a Human</h3>
+                  
+                  <div className="mb-6">
+                    <p className="text-sm text-gray-600">
+                      Not satisfied with the automated options? We'll connect you with a staff member who can provide personalized assistance.
+                    </p>
+                  </div>
+
+                  <div className="mb-4 space-y-2 rounded-lg bg-white p-3">
+                    <div className="flex items-center gap-2 text-xs text-gray-600">
+                      <AlertCircle className="h-3 w-3" />
+                      <span>Direct human support</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-gray-600">
+                      <Clock className="h-3 w-3" />
+                      <span>Response within 24 hours</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-gray-600">
+                      <CheckCircle2 className="h-3 w-3" />
+                      <span>Personalized resolution</span>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => handleSelectOption("escalate_to_human")}
+                    disabled={selectingOption}
+                    className="w-full rounded-lg bg-gradient-to-r from-red-500 to-orange-500 px-4 py-3 font-semibold text-white shadow-md transition-all hover:from-red-600 hover:to-orange-600 hover:shadow-lg disabled:opacity-50"
+                  >
+                    {selectingOption ? "Processing..." : "Escalate to Human"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

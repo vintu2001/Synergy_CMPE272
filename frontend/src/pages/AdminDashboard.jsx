@@ -2,8 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getAllRequests, resolveRequest } from "../services/api";
 import LoadingSpinner from "../components/LoadingSpinner";
 import StatusBadge from "../components/StatusBadge";
-import Toast from "../components/Toast";
-import { Shield, Search, Filter, RefreshCw, Eye, EyeOff, Key, ChevronDown, ChevronRight, DollarSign, Clock, Heart, CheckCircle2, X, Star, AlertTriangle, UserX } from "lucide-react";
+import { Shield, Search, Filter, RefreshCw, Eye, EyeOff, Key, ChevronDown, ChevronRight, DollarSign, Clock, Heart } from "lucide-react";
 
 export default function AdminDashboard() {
   const [apiKey, setApiKey] = useState(localStorage.getItem("admin_api_key") || "");
@@ -18,13 +17,6 @@ export default function AdminDashboard() {
   const [sortField, setSortField] = useState("created_at");
   const [sortDir, setSortDir] = useState("desc");
   const [expandedRow, setExpandedRow] = useState(null);
-  const [toast, setToast] = useState(null);
-  const [resolveModal, setResolveModal] = useState(null);
-  const [resolutionNotes, setResolutionNotes] = useState("");
-  const [resolving, setResolving] = useState(false);
-  const [urgentOnly, setUrgentOnly] = useState(false);
-  const [requireHumanOnly, setRequireHumanOnly] = useState(false);
-  const [escalatedOnly, setEscalatedOnly] = useState(false);
 
   async function load() {
     if (!apiKey) return;
@@ -305,20 +297,39 @@ export default function AdminDashboard() {
         ) : (
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
-                <thead className="bg-slate-100 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
                   <tr>
-                    <th className="px-6 py-3 text-left">Request ID</th>
-                    <th className="px-6 py-3 text-left">Resident</th>
-                    <th className="px-6 py-3 text-left">Category</th>
-                    <th className="px-6 py-3 text-left">Urgency</th>
-                    <th className="px-6 py-3 text-left">Status</th>
-                    <th className="px-6 py-3 text-left">Confidence</th>
-                    <th className="px-6 py-3 text-left">Risk</th>
-                    <th className="px-6 py-3 text-left">Options</th>
-                    <th className="px-6 py-3 text-left">Created</th>
-                    <th className="px-6 py-3 text-left">Actions</th>
-                    <th className="px-6 py-3 text-left">Details</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
+                      Request ID
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
+                      Resident
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
+                      Category
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
+                      Urgency
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
+                      Status
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
+                      Confidence
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
+                      Risk
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
+                      Options
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
+                      Created
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
+                      Details
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
@@ -391,17 +402,6 @@ export default function AdminDashboard() {
                           {new Date(r.created_at).toLocaleString()}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4">
-                          {(r.status === "In Progress" || r.status === "IN_PROGRESS") && (
-                            <button
-                              onClick={() => setResolveModal({ requestId: r.request_id, requestText: r.message_text })}
-                              className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200 dark:bg-emerald-400 dark:text-emerald-950 dark:hover:bg-emerald-300"
-                            >
-                              <CheckCircle2 className="h-3 w-3" />
-                              Resolve
-                            </button>
-                          )}
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4">
                           <button
                             onClick={() => setExpandedRow(expandedRow === r.request_id ? null : r.request_id)}
                             className="text-slate-500 transition hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
@@ -423,6 +423,33 @@ export default function AdminDashboard() {
                                 <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{r.message_text}</p>
                               </div>
 
+                              {/* User Selection Info */}
+                              {r.user_selected_option_id && (
+                                <div className="rounded-lg bg-gradient-to-r from-green-50 to-emerald-50 p-4 shadow">
+                                  <h4 className="mb-2 text-sm font-semibold text-gray-700">✅ User Selection</h4>
+                                  <div className="flex items-center gap-3">
+                                    <span className="text-sm text-gray-900">
+                                      User selected: <strong>{r.user_selected_option_id}</strong>
+                                    </span>
+                                    {r.recommended_option_id && (
+                                      <>
+                                        <span className="text-gray-400">•</span>
+                                        {r.user_selected_option_id === r.recommended_option_id ? (
+                                          <span className="flex items-center gap-1 text-sm font-semibold text-green-600">
+                                            <CheckCircle2 className="h-4 w-4" />
+                                            Matches AI recommendation
+                                          </span>
+                                        ) : (
+                                          <span className="flex items-center gap-1 text-sm font-semibold text-orange-600">
+                                            ⚠️ AI recommended: {r.recommended_option_id}
+                                          </span>
+                                        )}
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
                               {r.user_selected_option_id && (
                                 <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm dark:border-emerald-900/40 dark:bg-emerald-900/20">
                                   <h4 className="text-sm font-semibold text-emerald-700 dark:text-emerald-200">Resident choice</h4>
@@ -436,31 +463,56 @@ export default function AdminDashboard() {
                               )}
 
                               {r.simulated_options && r.simulated_options.length > 0 && (
-                                <div className="md:col-span-2">
-                                  <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-200">Simulated options</h4>
-                                  <div className="mt-3 grid gap-3 md:grid-cols-3">
-                                    {r.simulated_options.map((opt) => {
-                                      const isRecommended = opt.option_id === r.recommended_option_id;
-                                      const isUserSelected = opt.option_id === r.user_selected_option_id;
-                                      return (
-                                        <div
-                                          key={opt.option_id}
-                                          className={`rounded-xl border border-slate-200 bg-white p-4 text-sm shadow-sm transition hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 ${
-                                            isRecommended ? "ring-2 ring-amber-400" : ""
-                                          } ${isUserSelected ? "ring-2 ring-emerald-400" : ""}`}
-                                        >
-                                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                <div>
+                                  <h4 className="mb-3 text-sm font-semibold text-gray-700">
+                                    🎯 Simulated Resolution Options
+                                  </h4>
+                                  <div className="grid gap-4 md:grid-cols-3">
+                                    {r.simulated_options.map((opt, idx) => (
+                                      <div
+                                        key={opt.option_id}
+                                        className="rounded-lg bg-white p-4 shadow-md transition-all hover:shadow-lg"
+                                      >
+                                        <div className="mb-3 flex items-center gap-2">
+                                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-r from-blue-500 to-purple-500 text-xs font-bold text-white">
+                                            {idx + 1}
+                                          </span>
+                                          <span className="text-xs font-semibold text-gray-500">
                                             {opt.option_id}
-                                          </p>
-                                          <h5 className="mt-2 font-semibold text-slate-800 dark:text-slate-100">{opt.action}</h5>
-                                          <div className="mt-3 space-y-1 text-xs text-slate-600 dark:text-slate-300">
-                                            <p>Cost: ${parseFloat(opt.estimated_cost || 0).toFixed(2)}</p>
-                                            <p>Time: {parseFloat(opt.time_to_resolution || 0).toFixed(1)}h</p>
-                                            <p>Satisfaction: {Math.round((opt.resident_satisfaction_impact || 0) * 100)}%</p>
+                                          </span>
+                                        </div>
+                                        <h5 className="mb-3 text-sm font-bold text-gray-900">{opt.action}</h5>
+                                        <div className="space-y-2">
+                                          <div className="flex items-center justify-between text-xs">
+                                            <span className="flex items-center gap-1 text-gray-600">
+                                              <DollarSign className="h-3 w-3" />
+                                              Cost
+                                            </span>
+                                            <span className="font-semibold text-green-600">
+                                              ${opt.estimated_cost.toFixed(2)}
+                                            </span>
+                                          </div>
+                                          <div className="flex items-center justify-between text-xs">
+                                            <span className="flex items-center gap-1 text-gray-600">
+                                              <Clock className="h-3 w-3" />
+                                              Time
+                                            </span>
+                                            <span className="font-semibold text-blue-600">
+                                              {opt.time_to_resolution.toFixed(1)}h
+                                            </span>
+                                          </div>
+                                          <div className="flex items-center justify-between text-xs">
+                                            <span className="flex items-center gap-1 text-gray-600">
+                                              <Heart className="h-3 w-3" />
+                                              Satisfaction
+                                            </span>
+                                            <span className="font-semibold text-red-600">
+                                              {(opt.resident_satisfaction_impact * 100).toFixed(0)}%
+                                            </span>
                                           </div>
                                         </div>
-                                      );
-                                    })}
+                                      </div>
+                                    ))}
                                   </div>
                                 </div>
                               )}
@@ -476,69 +528,6 @@ export default function AdminDashboard() {
           </div>
         )}
       </div>
-      </section>
-      
-      {/* Toast Notifications */}
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-      
-      {/* Resolve Modal */}
-      {resolveModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-8 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-700 dark:bg-slate-900">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Mark as resolved</h3>
-              <button
-                onClick={() => {
-                  setResolveModal(null);
-                  setResolutionNotes("");
-                }}
-                className="rounded-full p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            
-            <div className="mb-4">
-              <p className="mb-2 text-sm text-slate-600 dark:text-slate-300">Request</p>
-              <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
-                {resolveModal.requestText}
-              </p>
-            </div>
-            
-            <div className="mb-6">
-              <label className="mb-2 block text-sm font-semibold text-slate-700 dark:text-slate-200">
-                Resolution notes (optional)
-              </label>
-              <textarea
-                rows={4}
-                className="w-full rounded-lg border border-slate-300 px-4 py-3 text-sm text-slate-900 focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-400 dark:focus:ring-slate-800"
-                placeholder="Add notes for the team (optional)"
-                value={resolutionNotes}
-                onChange={(e) => setResolutionNotes(e.target.value)}
-              />
-            </div>
-            
-            <div className="flex gap-3">
-              <button
-                onClick={() => {
-                  setResolveModal(null);
-                  setResolutionNotes("");
-                }}
-                className="flex-1 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-200 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800 dark:focus:ring-slate-700"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleResolve}
-                disabled={resolving}
-                className="flex-1 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200 disabled:opacity-60 dark:bg-emerald-400 dark:text-emerald-950 dark:hover:bg-emerald-300"
-              >
-                {resolving ? "Processing..." : "Confirm resolution"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
