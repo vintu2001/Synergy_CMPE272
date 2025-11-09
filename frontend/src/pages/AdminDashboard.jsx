@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { getAllRequests } from "../services/api";
+import { getAllRequests, resolveRequest } from "../services/api";
 import LoadingSpinner from "../components/LoadingSpinner";
 import StatusBadge from "../components/StatusBadge";
-import { Shield, Search, Filter, RefreshCw, Eye, EyeOff, Key, ChevronDown, ChevronRight, DollarSign, Clock, Heart } from "lucide-react";
+import Toast from "../components/Toast";
+import { Shield, Search, Filter, RefreshCw, Eye, EyeOff, Key, ChevronDown, ChevronRight, DollarSign, Clock, Heart, CheckCircle2, X, Star } from "lucide-react";
 
 export default function AdminDashboard() {
   const [apiKey, setApiKey] = useState(localStorage.getItem("admin_api_key") || "");
@@ -17,6 +18,10 @@ export default function AdminDashboard() {
   const [sortField, setSortField] = useState("created_at");
   const [sortDir, setSortDir] = useState("desc");
   const [expandedRow, setExpandedRow] = useState(null);
+  const [toast, setToast] = useState(null);
+  const [resolveModal, setResolveModal] = useState(null);
+  const [resolutionNotes, setResolutionNotes] = useState("");
+  const [resolving, setResolving] = useState(false);
 
   async function load() {
     if (!apiKey) return;
@@ -36,6 +41,24 @@ export default function AdminDashboard() {
     if (apiKey) load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiKey]);
+
+  const handleResolve = async () => {
+    if (!resolveModal) return;
+    
+    setResolving(true);
+    try {
+      await resolveRequest(resolveModal.requestId, "admin", resolutionNotes || null);
+      setToast({ message: "Request marked as resolved!", type: "success" });
+      setResolveModal(null);
+      setResolutionNotes("");
+      // Reload requests
+      load();
+    } catch (e) {
+      setToast({ message: "Failed to resolve request. Please try again.", type: "error" });
+    } finally {
+      setResolving(false);
+    }
+  };
 
   const filtered = useMemo(() => {
     return items
@@ -263,6 +286,9 @@ export default function AdminDashboard() {
                       Created
                     </th>
                     <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
+                      Actions
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
                       Details
                     </th>
                   </tr>
@@ -329,6 +355,17 @@ export default function AdminDashboard() {
                           {new Date(r.created_at).toLocaleString()}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4">
+                          {(r.status === "In Progress" || r.status === "IN_PROGRESS") && (
+                            <button
+                              onClick={() => setResolveModal({ requestId: r.request_id, requestText: r.message_text })}
+                              className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 px-3 py-1.5 text-xs font-semibold text-white shadow-md transition-all hover:from-green-600 hover:to-emerald-600 hover:shadow-lg"
+                            >
+                              <CheckCircle2 className="h-3 w-3" />
+                              Resolve
+                            </button>
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-4">
                           <button
                             onClick={() => setExpandedRow(expandedRow === r.request_id ? null : r.request_id)}
                             className="text-blue-600 hover:text-blue-800 transition-colors"
@@ -351,6 +388,33 @@ export default function AdminDashboard() {
                                 <p className="text-sm text-gray-900">{r.message_text}</p>
                               </div>
 
+                              {/* User Selection Info */}
+                              {r.user_selected_option_id && (
+                                <div className="rounded-lg bg-gradient-to-r from-green-50 to-emerald-50 p-4 shadow">
+                                  <h4 className="mb-2 text-sm font-semibold text-gray-700">✅ User Selection</h4>
+                                  <div className="flex items-center gap-3">
+                                    <span className="text-sm text-gray-900">
+                                      User selected: <strong>{r.user_selected_option_id}</strong>
+                                    </span>
+                                    {r.recommended_option_id && (
+                                      <>
+                                        <span className="text-gray-400">•</span>
+                                        {r.user_selected_option_id === r.recommended_option_id ? (
+                                          <span className="flex items-center gap-1 text-sm font-semibold text-green-600">
+                                            <CheckCircle2 className="h-4 w-4" />
+                                            Matches AI recommendation
+                                          </span>
+                                        ) : (
+                                          <span className="flex items-center gap-1 text-sm font-semibold text-orange-600">
+                                            ⚠️ AI recommended: {r.recommended_option_id}
+                                          </span>
+                                        )}
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
                               {/* Simulation Options */}
                               {r.simulated_options && r.simulated_options.length > 0 && (
                                 <div>
@@ -358,11 +422,32 @@ export default function AdminDashboard() {
                                     🎯 Simulated Resolution Options
                                   </h4>
                                   <div className="grid gap-4 md:grid-cols-3">
-                                    {r.simulated_options.map((opt, idx) => (
+                                    {r.simulated_options.map((opt, idx) => {
+                                      const isRecommended = opt.option_id === r.recommended_option_id;
+                                      const isUserSelected = opt.option_id === r.user_selected_option_id;
+                                      return (
                                       <div
                                         key={opt.option_id}
-                                        className="rounded-lg bg-white p-4 shadow-md transition-all hover:shadow-lg"
+                                        className={`relative rounded-lg bg-white p-4 shadow-md transition-all hover:shadow-lg ${
+                                          isUserSelected ? "ring-2 ring-green-500" : ""
+                                        } ${isRecommended ? "ring-2 ring-yellow-400" : ""}`}
                                       >
+                                        {isUserSelected && (
+                                          <div className="absolute -top-2 -right-2">
+                                            <span className="inline-flex items-center gap-1 rounded-full bg-green-500 px-2 py-1 text-xs font-bold text-white shadow-lg">
+                                              <CheckCircle2 className="h-3 w-3" />
+                                              SELECTED
+                                            </span>
+                                          </div>
+                                        )}
+                                        {isRecommended && !isUserSelected && (
+                                          <div className="absolute -top-2 -right-2">
+                                            <span className="inline-flex items-center gap-1 rounded-full bg-yellow-400 px-2 py-1 text-xs font-bold text-white shadow-lg">
+                                              <Star className="h-3 w-3 fill-current" />
+                                              AI PICK
+                                            </span>
+                                          </div>
+                                        )}
                                         <div className="mb-3 flex items-center gap-2">
                                           <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-r from-blue-500 to-purple-500 text-xs font-bold text-white">
                                             {idx + 1}
@@ -379,7 +464,7 @@ export default function AdminDashboard() {
                                               Cost
                                             </span>
                                             <span className="font-semibold text-green-600">
-                                              ${opt.estimated_cost.toFixed(2)}
+                                              ${parseFloat(opt.estimated_cost || 0).toFixed(2)}
                                             </span>
                                           </div>
                                           <div className="flex items-center justify-between text-xs">
@@ -388,7 +473,7 @@ export default function AdminDashboard() {
                                               Time
                                             </span>
                                             <span className="font-semibold text-blue-600">
-                                              {opt.time_to_resolution.toFixed(1)}h
+                                              {parseFloat(opt.time_to_resolution || 0).toFixed(1)}h
                                             </span>
                                           </div>
                                           <div className="flex items-center justify-between text-xs">
@@ -397,12 +482,13 @@ export default function AdminDashboard() {
                                               Satisfaction
                                             </span>
                                             <span className="font-semibold text-red-600">
-                                              {(opt.resident_satisfaction_impact * 100).toFixed(0)}%
+                                              {(parseFloat(opt.resident_satisfaction_impact || 0) * 100).toFixed(0)}%
                                             </span>
                                           </div>
                                         </div>
                                       </div>
-                                    ))}
+                                      );
+                                    })}
                                   </div>
                                 </div>
                               )}
@@ -418,6 +504,68 @@ export default function AdminDashboard() {
           </div>
         )}
       </div>
+      
+      {/* Toast Notifications */}
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      
+      {/* Resolve Modal */}
+      {resolveModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-xl font-bold text-gray-900">Mark as Resolved (Admin)</h3>
+              <button
+                onClick={() => {
+                  setResolveModal(null);
+                  setResolutionNotes("");
+                }}
+                className="rounded-lg p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <div className="mb-4">
+              <p className="mb-2 text-sm text-gray-600">Request:</p>
+              <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-900">
+                {resolveModal.requestText}
+              </p>
+            </div>
+            
+            <div className="mb-6">
+              <label className="mb-2 block text-sm font-semibold text-gray-700">
+                Resolution Notes (Optional)
+              </label>
+              <textarea
+                rows={4}
+                className="w-full rounded-lg border-2 border-gray-200 px-4 py-3 text-sm transition-all focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                placeholder="Add any notes about how the issue was resolved..."
+                value={resolutionNotes}
+                onChange={(e) => setResolutionNotes(e.target.value)}
+              />
+            </div>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setResolveModal(null);
+                  setResolutionNotes("");
+                }}
+                className="flex-1 rounded-lg border-2 border-gray-300 px-4 py-2 font-semibold text-gray-700 transition-all hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleResolve}
+                disabled={resolving}
+                className="flex-1 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 px-4 py-2 font-semibold text-white shadow-md transition-all hover:from-green-600 hover:to-emerald-600 disabled:opacity-50"
+              >
+                {resolving ? "Processing..." : "Confirm Resolution"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

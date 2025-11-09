@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { useUser } from "../context/UserContext";
-import { getResidentRequests } from "../services/api";
+import { getResidentRequests, resolveRequest } from "../services/api";
 import LoadingSpinner from "../components/LoadingSpinner";
 import StatusBadge from "../components/StatusBadge";
-import { RefreshCw, Filter, Search, FileText, Calendar, User } from "lucide-react";
+import Toast from "../components/Toast";
+import { RefreshCw, Filter, Search, FileText, Calendar, User, CheckCircle2, X } from "lucide-react";
 
 export default function ResidentDashboard() {
   const { residentId, setResidentId } = useUser();
@@ -11,6 +12,10 @@ export default function ResidentDashboard() {
   const [error, setError] = useState("");
   const [items, setItems] = useState([]);
   const [statusFilter, setStatusFilter] = useState("All");
+  const [toast, setToast] = useState(null);
+  const [resolveModal, setResolveModal] = useState(null); // {requestId, requestText}
+  const [resolutionNotes, setResolutionNotes] = useState("");
+  const [resolving, setResolving] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -29,6 +34,24 @@ export default function ResidentDashboard() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [residentId]);
+
+  const handleResolve = async () => {
+    if (!resolveModal) return;
+    
+    setResolving(true);
+    try {
+      await resolveRequest(resolveModal.requestId, "resident", resolutionNotes || null);
+      setToast({ message: "Request marked as resolved!", type: "success" });
+      setResolveModal(null);
+      setResolutionNotes("");
+      // Reload requests
+      load();
+    } catch (e) {
+      setToast({ message: "Failed to resolve request. Please try again.", type: "error" });
+    } finally {
+      setResolving(false);
+    }
+  };
 
   const filtered = items.filter((i) => (statusFilter === "All" ? true : i.status === statusFilter));
 
@@ -124,6 +147,9 @@ export default function ResidentDashboard() {
                     <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
                       Created
                     </th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
@@ -166,6 +192,17 @@ export default function ResidentDashboard() {
                           {new Date(r.created_at).toLocaleDateString()}
                         </div>
                       </td>
+                      <td className="whitespace-nowrap px-6 py-4">
+                        {(r.status === "In Progress" || r.status === "IN_PROGRESS") && (
+                          <button
+                            onClick={() => setResolveModal({ requestId: r.request_id, requestText: r.message_text })}
+                            className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 px-4 py-2 text-sm font-semibold text-white shadow-md transition-all hover:from-green-600 hover:to-emerald-600 hover:shadow-lg"
+                          >
+                            <CheckCircle2 className="h-4 w-4" />
+                            Mark as Resolved
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -174,6 +211,68 @@ export default function ResidentDashboard() {
           </div>
         )}
       </div>
+      
+      {/* Toast Notifications */}
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      
+      {/* Resolve Modal */}
+      {resolveModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-xl font-bold text-gray-900">Mark as Resolved</h3>
+              <button
+                onClick={() => {
+                  setResolveModal(null);
+                  setResolutionNotes("");
+                }}
+                className="rounded-lg p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <div className="mb-4">
+              <p className="mb-2 text-sm text-gray-600">Request:</p>
+              <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-900">
+                {resolveModal.requestText}
+              </p>
+            </div>
+            
+            <div className="mb-6">
+              <label className="mb-2 block text-sm font-semibold text-gray-700">
+                Resolution Notes (Optional)
+              </label>
+              <textarea
+                rows={4}
+                className="w-full rounded-lg border-2 border-gray-200 px-4 py-3 text-sm transition-all focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                placeholder="Add any notes about how the issue was resolved..."
+                value={resolutionNotes}
+                onChange={(e) => setResolutionNotes(e.target.value)}
+              />
+            </div>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setResolveModal(null);
+                  setResolutionNotes("");
+                }}
+                className="flex-1 rounded-lg border-2 border-gray-300 px-4 py-2 font-semibold text-gray-700 transition-all hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleResolve}
+                disabled={resolving}
+                className="flex-1 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 px-4 py-2 font-semibold text-white shadow-md transition-all hover:from-green-600 hover:to-emerald-600 disabled:opacity-50"
+              >
+                {resolving ? "Processing..." : "Confirm Resolution"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

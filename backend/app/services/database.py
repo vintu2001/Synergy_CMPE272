@@ -69,6 +69,19 @@ def get_request(request_id: str) -> Optional[ResidentRequest]:
         return None
 
 
+def get_request_by_id(request_id: str) -> Optional[Dict]:
+    """Get request as dict (for more flexible access without schema validation)"""
+    try:
+        table = get_table()
+        response = table.get_item(Key={'request_id': request_id})
+        if 'Item' in response:
+            return response['Item']
+        return None
+    except ClientError as e:
+        logger.error(f"Error getting request by ID: {e}")
+        return None
+
+
 def get_requests_by_resident(resident_id: str) -> List[ResidentRequest]:
     try:
         table = get_table()
@@ -91,7 +104,7 @@ def get_all_requests() -> List[ResidentRequest]:
         return []
 
 
-def update_request_status(request_id: str, status: Status) -> bool:
+async def update_request_status(request_id: str, status: Status) -> bool:
     try:
         table = get_table()
         table.update_item(

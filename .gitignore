@@ -32,3 +32,31 @@ ml/models/*.h5
 
 # macOS system file
 .DS_Store
+
+# Log files
+*.log
+backend/backend.log
+frontend/frontend.log
+frontend.log
+nohup.out
+
+# Node.js
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Test files (optional - remove if you want to keep tests in repo)
+# test_*.py
+
+# Temporary files
+*.tmp
+*.bak
+.cache/

@@ -1,11 +1,6 @@
 """
-Resident API - Ticket 16
-API endpoints for residents to submit and view their requests.
-
-TODO (Ticket 16):
-- GET /get-requests/{resident_id} - Query DynamoDB for resident's requests
-- Integrate with message intake service
-- Return list of requests for frontend dashboard
+Resident API
+Provides endpoints for residents to view their request history.
 """
 from fastapi import APIRouter
 from typing import List

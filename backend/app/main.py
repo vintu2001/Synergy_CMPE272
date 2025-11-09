@@ -28,7 +28,7 @@ async def health_check():
 
 
 from app.agents import classification_agent, risk_prediction_agent, simulation_agent, decision_agent
-from app.services import message_intake, execution_layer, admin_api, resident_api
+from app.services import message_intake, execution_layer, admin_api, resident_api, governance_api
 
 app.include_router(classification_agent.router, prefix="/api/v1", tags=["agents"])
 app.include_router(risk_prediction_agent.router, prefix="/api/v1", tags=["agents"])
@@ -40,6 +40,7 @@ app.include_router(execution_layer.router, prefix="/api/v1", tags=["services"])
 app.include_router(resident_api.router, prefix="/api/v1", tags=["services"])
 
 app.include_router(admin_api.router, prefix="/api/v1", tags=["admin"])
+app.include_router(governance_api.router, prefix="/api/v1", tags=["governance"])  # Ticket 15
 
 
 if __name__ == "__main__":

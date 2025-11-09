@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 from enum import Enum
 
@@ -160,8 +160,13 @@ class ResidentRequest(BaseModel):
     risk_forecast: Optional[float] = None
     classification_confidence: Optional[float] = None
     simulated_options: Optional[List[Dict]] = None  # Store all simulation options
+    recommended_option_id: Optional[str] = None  # AI-recommended option
+    user_selected_option_id: Optional[str] = None  # User's actual choice
     chosen_action: Optional[str] = None
     chosen_option_id: Optional[str] = None
+    resolution_notes: Optional[str] = None  # Notes when marking resolved
+    resolved_by: Optional[str] = None  # Who resolved it (admin/resident)
+    resolved_at: Optional[datetime] = None  # When it was resolved
     created_at: datetime
     updated_at: datetime
 
@@ -169,4 +174,122 @@ class ResidentRequest(BaseModel):
 class AdminRequestResponse(BaseModel):
     requests: List[ResidentRequest]
     total_count: int
+
+
+class SelectOptionRequest(BaseModel):
+    """Request model for resident selecting an option"""
+    request_id: str = Field(..., description="Request ID")
+    selected_option_id: str = Field(..., description="Option ID chosen by user")
+
+
+class ResolveRequestModel(BaseModel):
+    """Request model for marking a request as resolved"""
+    request_id: str = Field(..., description="Request ID to resolve")
+    resolution_notes: Optional[str] = Field(None, description="Optional notes about resolution")
+    resolved_by: str = Field(..., description="Who resolved it: 'admin' or 'resident'")
+
+
+# ============================================================================
+# GOVERNANCE MODELS (Ticket 15)
+# ============================================================================
+
+class GovernanceLog(BaseModel):
+    """
+    Governance log entry for AI decision tracking and audit trails.
+    Mimics IBM Watsonx.governance functionality.
+    """
+    log_id: str = Field(..., description="Unique governance log identifier")
+    request_id: str = Field(..., description="Associated request ID")
+    resident_id: str = Field(..., description="Resident who made the request")
+    
+    # Decision Information
+    decision_timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    chosen_action: str = Field(..., description="Action selected by decision agent")
+    chosen_option_id: str = Field(..., description="Option ID selected")
+    
+    # Classification Context
+    category: IssueCategory = Field(..., description="Issue category")
+    urgency: Urgency = Field(..., description="Issue urgency level")
+    intent: Intent = Field(..., description="Request intent")
+    
+    # Decision Reasoning (Explainability)
+    reasoning: str = Field(..., description="Detailed reasoning for the decision")
+    policy_scores: Dict[str, float] = Field(..., description="Policy scores for all options")
+    alternatives_considered: List[str] = Field(..., description="Alternative options evaluated")
+    
+    # Risk & Simulation Context
+    risk_score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Risk forecast score")
+    total_options_simulated: int = Field(..., description="Number of options simulated")
+    
+    # Cost & Time Analysis
+    estimated_cost: float = Field(..., description="Estimated cost of chosen action")
+    estimated_time: float = Field(..., description="Estimated time to resolution (hours)")
+    exceeds_budget_threshold: bool = Field(False, description="Whether cost exceeded threshold")
+    exceeds_time_threshold: bool = Field(False, description="Whether time exceeded threshold")
+    
+    # Escalation
+    escalated: bool = Field(False, description="Whether decision resulted in human escalation")
+    escalation_reason: Optional[str] = Field(None, description="Reason for escalation if applicable")
+    
+    # Metadata
+    agent_version: str = Field(default="v1.0", description="Decision agent version")
+    policy_weights: Dict[str, float] = Field(..., description="Policy weights used in decision")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "log_id": "GOV_20241109123456_ABC123",
+                "request_id": "REQ_123456789ABC",
+                "resident_id": "RES_1001",
+                "decision_timestamp": "2024-11-09T12:34:56.789Z",
+                "chosen_action": "Dispatch emergency plumber",
+                "chosen_option_id": "opt_1",
+                "category": "Maintenance",
+                "urgency": "High",
+                "intent": "solve_problem",
+                "reasoning": "High urgency maintenance issue requires immediate response...",
+                "policy_scores": {"opt_1": 0.85, "opt_2": 0.72, "opt_3": 0.60},
+                "alternatives_considered": ["Send notification", "Schedule routine maintenance"],
+                "risk_score": 0.75,
+                "total_options_simulated": 3,
+                "estimated_cost": 250.0,
+                "estimated_time": 4.0,
+                "escalated": False,
+                "agent_version": "v1.0",
+                "policy_weights": {"urgency": 0.4, "cost": 0.3, "time": 0.2, "satisfaction": 0.1}
+            }
+        }
+
+
+class GovernanceQueryRequest(BaseModel):
+    """Request model for querying governance logs."""
+    request_id: Optional[str] = Field(None, description="Filter by specific request ID")
+    resident_id: Optional[str] = Field(None, description="Filter by resident ID")
+    category: Optional[IssueCategory] = Field(None, description="Filter by issue category")
+    urgency: Optional[Urgency] = Field(None, description="Filter by urgency level")
+    escalated_only: Optional[bool] = Field(False, description="Show only escalated decisions")
+    start_date: Optional[datetime] = Field(None, description="Filter logs after this date")
+    end_date: Optional[datetime] = Field(None, description="Filter logs before this date")
+    limit: Optional[int] = Field(100, ge=1, le=1000, description="Maximum number of logs to return")
+
+
+class GovernanceQueryResponse(BaseModel):
+    """Response model for governance log queries."""
+    logs: List[GovernanceLog]
+    total_count: int
+    query_timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    filters_applied: Dict[str, Any]
+
+
+class GovernanceStatsResponse(BaseModel):
+    """Statistics about governance logs for analytics."""
+    total_decisions: int
+    total_escalations: int
+    escalation_rate: float = Field(..., ge=0.0, le=1.0)
+    average_cost: float
+    average_time: float
+    decisions_by_category: Dict[str, int]
+    decisions_by_urgency: Dict[str, int]
+    cost_threshold_violations: int
+    time_threshold_violations: int
 
