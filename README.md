@@ -68,7 +68,7 @@ Synergy_CMPE272/
 │   ├── aws/                 # AWS resources
 │   └── docker/              # Docker compose
 │
-└── docs/                    # Documentation
+└── docs/                    # Project Documentation
 ```
 
 ---
