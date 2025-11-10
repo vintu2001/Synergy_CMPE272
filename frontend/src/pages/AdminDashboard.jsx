@@ -3,7 +3,7 @@ import { getAllRequests, resolveRequest } from "../services/api";
 import LoadingSpinner from "../components/LoadingSpinner";
 import StatusBadge from "../components/StatusBadge";
 import Toast from "../components/Toast";
-import { Shield, Search, Filter, RefreshCw, Eye, EyeOff, Key, ChevronDown, ChevronRight, DollarSign, Clock, Heart, CheckCircle2, X, Star } from "lucide-react";
+import { Shield, Search, Filter, RefreshCw, Eye, EyeOff, Key, ChevronDown, ChevronRight, DollarSign, Clock, Heart, CheckCircle2, X, Star, AlertTriangle, UserX } from "lucide-react";
 
 export default function AdminDashboard() {
   const [apiKey, setApiKey] = useState(localStorage.getItem("admin_api_key") || "");
@@ -22,6 +22,9 @@ export default function AdminDashboard() {
   const [resolveModal, setResolveModal] = useState(null);
   const [resolutionNotes, setResolutionNotes] = useState("");
   const [resolving, setResolving] = useState(false);
+  const [urgentOnly, setUrgentOnly] = useState(false);
+  const [requireHumanOnly, setRequireHumanOnly] = useState(false);
+  const [escalatedOnly, setEscalatedOnly] = useState(false);
 
   async function load() {
     if (!apiKey) return;
@@ -73,8 +76,17 @@ export default function AdminDashboard() {
           r.resident_id?.toLowerCase().includes(q) ||
           r.message_text?.toLowerCase().includes(q)
         );
+      })
+      .filter((r) => (urgentOnly ? r.urgency === "High" : true))
+      .filter((r) => {
+        if (!requireHumanOnly) return true;
+        return r.intent === "human_escalation" || r.user_selected_option_id === "escalate_to_human";
+      })
+      .filter((r) => {
+        if (!escalatedOnly) return true;
+        return r.status === "Escalated" || r.user_selected_option_id === "escalate_to_human";
       });
-  }, [items, category, urgency, status, search]);
+  }, [items, category, urgency, status, search, urgentOnly, requireHumanOnly, escalatedOnly]);
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
@@ -105,208 +117,224 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-gray-50">
-      <div className="mx-auto max-w-7xl px-4 py-8">
-        <div className="mb-8">
-          <div className="mb-6 flex items-center gap-3">
-            <div className="rounded-full bg-gradient-to-r from-slate-600 to-gray-700 p-3">
-              <Shield className="h-6 w-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
-              <p className="mt-1 text-gray-600">View and manage all system requests</p>
-            </div>
-          </div>
-
-          <div className="rounded-xl bg-white p-6 shadow-lg">
-            <div className="mb-4 flex items-center gap-2">
-              <Key className="h-5 w-5 text-gray-500" />
-              <label className="text-sm font-semibold text-gray-700">Admin API Key</label>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="relative flex-1">
-                <input
-                  type={showKey ? "text" : "password"}
-                  placeholder="Enter admin API key"
-                  className="w-full rounded-lg border-2 border-gray-200 px-4 py-2 pr-10 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                />
-                <button
-                  onClick={() => setShowKey(!showKey)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                >
-                  {showKey ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                </button>
+    <div className="w-full bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+      <section className="w-full px-4 py-10 sm:px-6 lg:px-10">
+        <div className="space-y-8">
+          <header className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="mb-6 flex items-center gap-3">
+              <div className="rounded-full bg-slate-900 p-3 text-white shadow-md dark:bg-slate-100 dark:text-slate-900">
+                <Shield className="h-6 w-6" />
               </div>
-              <button
-                onClick={saveKey}
-                className="rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-2 font-semibold text-white shadow-md transition-all hover:shadow-lg"
-              >
-                Save
-              </button>
-              <button
-                onClick={clearKey}
-                className="rounded-lg border-2 border-gray-300 px-6 py-2 font-semibold text-gray-700 transition-all hover:bg-gray-50"
-              >
-                Clear
-              </button>
+              <div>
+                <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">Admin console</h1>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-300">
+                  Monitor resident requests, identify escalations, and resolve issues quickly.
+                </p>
+              </div>
             </div>
-          </div>
-        </div>
 
-        <div className="mb-6 space-y-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex flex-1 items-center gap-2 rounded-lg bg-white px-4 py-2 shadow-md">
-              <Search className="h-4 w-4 text-gray-500" />
-              <input
-                placeholder="Search by ID, resident, or message..."
-                className="flex-1 border-0 bg-transparent text-sm focus:outline-none"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-950">
+              <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                <Key className="h-4 w-4 text-slate-500 dark:text-slate-300" />
+                Admin password
+              </div>
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+                <div className="relative flex-1">
+                  <input
+                    type={showKey ? "text" : "password"}
+                    placeholder="Enter your admin password"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5 pr-10 text-sm text-slate-900 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-slate-400 dark:focus:ring-slate-700"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                  />
+                  <button
+                    onClick={() => setShowKey(!showKey)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
+                  >
+                    {showKey ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={saveKey}
+                    className="inline-flex items-center justify-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
+                  >
+                    Save
+                  </button>
+                  <button
+                    onClick={clearKey}
+                    className="inline-flex items-center justify-center rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-200 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800 dark:focus:ring-slate-700"
+                  >
+                    Clear
+                  </button>
+                  <button
+                    onClick={load}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-200 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800 dark:focus:ring-slate-700"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    Refresh
+                  </button>
+                </div>
+              </div>
             </div>
-            <button
-              onClick={load}
-              className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2 font-semibold text-white shadow-md transition-all hover:shadow-lg"
-            >
-              <RefreshCw className="h-4 w-4" />
-              Refresh
-            </button>
-          </div>
+          </header>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 rounded-lg bg-white px-4 py-2 shadow-md">
-              <Filter className="h-4 w-4 text-gray-500" />
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-600 shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+                <Search className="h-4 w-4 text-slate-400" />
+                <input
+                  placeholder="Search by request ID, resident, or message..."
+                  className="flex-1 border-0 bg-transparent focus:outline-none dark:bg-transparent"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-600 shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+                Total: <span className="font-semibold text-slate-800 dark:text-slate-100">{sorted.length}</span>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-600 shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+                <Filter className="h-4 w-4 text-slate-400" />
+                <select
+                  className="border-0 bg-transparent focus:outline-none dark:bg-transparent"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                >
+                  {["All", "Maintenance", "Billing", "Security", "Deliveries", "Amenities"].map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <select
-                className="border-0 bg-transparent text-sm focus:outline-none"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-600 shadow-sm focus:outline-none dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
+                value={urgency}
+                onChange={(e) => setUrgency(e.target.value)}
               >
-                {["All", "Maintenance", "Billing", "Security", "Deliveries", "Amenities"].map((c) => (
-                  <option key={c} value={c}>
-                    {c}
+                {["All", "High", "Medium", "Low"].map((u) => (
+                  <option key={u} value={u}>
+                    {u}
                   </option>
                 ))}
               </select>
+              <select
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-600 shadow-sm focus:outline-none dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+              >
+                {["All", "Submitted", "Processing", "In Progress", "Resolved", "Escalated"].map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-600 shadow-sm focus:outline-none dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
+                value={sortField}
+                onChange={(e) => setSortField(e.target.value)}
+              >
+                {["created_at", "updated_at", "category", "urgency", "status"].map((f) => (
+                  <option key={f} value={f}>
+                    Sort by {f.replace("_", " ")}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 dark:focus:ring-slate-700"
+              >
+                {sortDir === "asc" ? "↑ Asc" : "↓ Desc"}
+              </button>
             </div>
-            <select
-              className="rounded-lg bg-white px-4 py-2 text-sm shadow-md focus:outline-none"
-              value={urgency}
-              onChange={(e) => setUrgency(e.target.value)}
-            >
-              {["All", "High", "Medium", "Low"].map((u) => (
-                <option key={u} value={u}>
-                  {u}
-                </option>
-              ))}
-            </select>
-            <select
-              className="rounded-lg bg-white px-4 py-2 text-sm shadow-md focus:outline-none"
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-            >
-              {["All", "Submitted", "Processing", "In Progress", "Resolved", "Escalated"].map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-            <select
-              className="rounded-lg bg-white px-4 py-2 text-sm shadow-md focus:outline-none"
-              value={sortField}
-              onChange={(e) => setSortField(e.target.value)}
-            >
-              {["created_at", "updated_at", "category", "urgency", "status"].map((f) => (
-                <option key={f} value={f}>
-                  Sort by {f.replace("_", " ")}
-                </option>
-              ))}
-            </select>
-            <button
-              onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
-              className="rounded-lg bg-white px-4 py-2 text-sm font-semibold shadow-md transition-all hover:bg-gray-50"
-            >
-              {sortDir === "asc" ? "↑ Asc" : "↓ Desc"}
-            </button>
-            <div className="ml-auto rounded-lg bg-white px-4 py-2 shadow-md">
-              <span className="text-sm font-semibold text-gray-700">
-                {sorted.length} {sorted.length === 1 ? "request" : "requests"}
-              </span>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => setUrgentOnly((prev) => !prev)}
+                className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold transition ${
+                  urgentOnly
+                    ? "bg-rose-500 text-white shadow-sm dark:bg-rose-400 dark:text-rose-950"
+                    : "border border-slate-200 bg-white text-rose-600 shadow-sm hover:bg-rose-50 dark:border-rose-900/60 dark:bg-slate-900 dark:text-rose-300 dark:hover:bg-rose-900/30"
+                }`}
+              >
+                <AlertTriangle className="h-3 w-3" />
+                Urgent
+              </button>
+              <button
+                onClick={() => setRequireHumanOnly((prev) => !prev)}
+                className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold transition ${
+                  requireHumanOnly
+                    ? "bg-purple-600 text-white shadow-sm dark:bg-purple-400 dark:text-purple-950"
+                    : "border border-slate-200 bg-white text-purple-600 shadow-sm hover:bg-purple-50 dark:border-purple-900/60 dark:bg-slate-900 dark:text-purple-300 dark:hover:bg-purple-900/30"
+                }`}
+              >
+                <UserX className="h-3 w-3" />
+                Needs Human
+              </button>
+              <button
+                onClick={() => setEscalatedOnly((prev) => !prev)}
+                className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold transition ${
+                  escalatedOnly
+                    ? "bg-amber-500 text-white shadow-sm dark:bg-amber-400 dark:text-amber-950"
+                    : "border border-slate-200 bg-white text-amber-600 shadow-sm hover:bg-amber-50 dark:border-amber-900/60 dark:bg-slate-900 dark:text-amber-300 dark:hover:bg-amber-900/30"
+                }`}
+              >
+                Escalated
+              </button>
             </div>
           </div>
-        </div>
 
         {loading ? (
-          <div className="flex items-center justify-center rounded-2xl bg-white p-12 shadow-xl">
-            <LoadingSpinner label="Loading all requests..." />
+          <div className="flex items-center justify-center rounded-2xl border border-slate-200 bg-white p-16 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <LoadingSpinner label="Loading admin data..." />
           </div>
         ) : error ? (
-          <div className="rounded-2xl bg-red-50 border-2 border-red-200 p-6 shadow-xl">
-            <p className="text-sm font-medium text-red-800">{error}</p>
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-sm font-medium text-rose-700 shadow-sm dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200">
+            {error}
           </div>
         ) : sorted.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-2xl bg-white p-12 shadow-xl">
-            <p className="text-lg font-semibold text-gray-600">No data available</p>
-            <p className="mt-2 text-sm text-gray-500">
-              {apiKey ? "No requests match your filters" : "Enter API key to view requests"}
+          <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white p-12 text-center shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <p className="text-base font-semibold text-slate-700 dark:text-slate-200">No requests to show</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              {apiKey ? "Adjust your filters or refresh to see more data." : "Enter your admin password to load requests."}
             </p>
           </div>
         ) : (
-          <div className="overflow-hidden rounded-2xl bg-white shadow-xl">
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
+              <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
+                <thead className="bg-slate-100 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                   <tr>
-                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
-                      Request ID
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
-                      Resident
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
-                      Category
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
-                      Urgency
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
-                      Status
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
-                      Confidence
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
-                      Risk
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
-                      Options
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
-                      Created
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
-                      Actions
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
-                      Details
-                    </th>
+                    <th className="px-6 py-3 text-left">Request ID</th>
+                    <th className="px-6 py-3 text-left">Resident</th>
+                    <th className="px-6 py-3 text-left">Category</th>
+                    <th className="px-6 py-3 text-left">Urgency</th>
+                    <th className="px-6 py-3 text-left">Status</th>
+                    <th className="px-6 py-3 text-left">Confidence</th>
+                    <th className="px-6 py-3 text-left">Risk</th>
+                    <th className="px-6 py-3 text-left">Options</th>
+                    <th className="px-6 py-3 text-left">Created</th>
+                    <th className="px-6 py-3 text-left">Actions</th>
+                    <th className="px-6 py-3 text-left">Details</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200 bg-white">
+                <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                   {sorted.map((r) => (
                     <>
-                      <tr key={r.request_id} className="transition-colors hover:bg-blue-50">
-                        <td className="whitespace-nowrap px-6 py-4">
-                          <code className="rounded bg-gray-100 px-2 py-1 text-xs font-mono text-gray-800">
+                      <tr key={r.request_id} className="hover:bg-slate-50 dark:hover:bg-slate-800/60">
+                        <td className="whitespace-nowrap px-6 py-4 text-xs text-slate-600 dark:text-slate-300">
+                          <code className="rounded bg-slate-100 px-2 py-1 font-mono text-slate-700 dark:bg-slate-800 dark:text-slate-200">
                             {r.request_id}
                           </code>
                         </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
+                        <td className="whitespace-nowrap px-6 py-4 text-slate-700 dark:text-slate-200">
                           {r.resident_id}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4">
-                          <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-800">
+                          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
                             {r.category}
                           </span>
                         </td>
@@ -314,10 +342,10 @@ export default function AdminDashboard() {
                           <span
                             className={`rounded-full px-3 py-1 text-xs font-semibold ${
                               r.urgency === "High"
-                                ? "bg-red-100 text-red-800"
+                                ? "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-200"
                                 : r.urgency === "Medium"
-                                ? "bg-yellow-100 text-yellow-800"
-                                : "bg-blue-100 text-blue-800"
+                                ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-200"
+                                : "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-200"
                             }`}
                           >
                             {r.urgency}
@@ -326,39 +354,47 @@ export default function AdminDashboard() {
                         <td className="whitespace-nowrap px-6 py-4">
                           <StatusBadge status={r.status} />
                         </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
+                        <td className="whitespace-nowrap px-6 py-4 text-slate-600 dark:text-slate-300">
                           {r.classification_confidence != null ? (
                             <span className="font-semibold">{Math.round(r.classification_confidence * 100)}%</span>
                           ) : (
-                            <span className="text-gray-400">-</span>
+                            <span className="text-slate-400">-</span>
                           )}
                         </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
+                        <td className="whitespace-nowrap px-6 py-4 text-slate-600 dark:text-slate-300">
                           {r.risk_forecast != null ? (
-                            <span className={`font-semibold ${r.risk_forecast > 0.7 ? 'text-red-600' : r.risk_forecast > 0.3 ? 'text-yellow-600' : 'text-green-600'}`}>
+                            <span
+                              className={`font-semibold ${
+                                r.risk_forecast > 0.7
+                                  ? "text-rose-600"
+                                  : r.risk_forecast > 0.3
+                                  ? "text-amber-600"
+                                  : "text-emerald-600"
+                              }`}
+                            >
                               {Math.round(r.risk_forecast * 100)}%
                             </span>
                           ) : (
-                            <span className="text-gray-400">-</span>
+                            <span className="text-slate-400">-</span>
                           )}
                         </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
+                        <td className="whitespace-nowrap px-6 py-4 text-slate-600 dark:text-slate-300">
                           {r.simulated_options?.length > 0 ? (
-                            <span className="rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-800">
+                            <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200">
                               {r.simulated_options.length} options
                             </span>
                           ) : (
-                            <span className="text-gray-400">-</span>
+                            <span className="text-slate-400">-</span>
                           )}
                         </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
+                        <td className="whitespace-nowrap px-6 py-4 text-slate-600 dark:text-slate-300">
                           {new Date(r.created_at).toLocaleString()}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4">
                           {(r.status === "In Progress" || r.status === "IN_PROGRESS") && (
                             <button
                               onClick={() => setResolveModal({ requestId: r.request_id, requestText: r.message_text })}
-                              className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 px-3 py-1.5 text-xs font-semibold text-white shadow-md transition-all hover:from-green-600 hover:to-emerald-600 hover:shadow-lg"
+                              className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200 dark:bg-emerald-400 dark:text-emerald-950 dark:hover:bg-emerald-300"
                             >
                               <CheckCircle2 className="h-3 w-3" />
                               Resolve
@@ -368,7 +404,7 @@ export default function AdminDashboard() {
                         <td className="whitespace-nowrap px-6 py-4">
                           <button
                             onClick={() => setExpandedRow(expandedRow === r.request_id ? null : r.request_id)}
-                            className="text-blue-600 hover:text-blue-800 transition-colors"
+                            className="text-slate-500 transition hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
                           >
                             {expandedRow === r.request_id ? (
                               <ChevronDown className="h-5 w-5" />
@@ -380,113 +416,49 @@ export default function AdminDashboard() {
                       </tr>
                       {expandedRow === r.request_id && (
                         <tr key={`${r.request_id}-details`}>
-                          <td colSpan="10" className="bg-gradient-to-r from-blue-50 to-purple-50 px-6 py-6">
-                            <div className="space-y-4">
-                              {/* Message */}
-                              <div className="rounded-lg bg-white p-4 shadow">
-                                <h4 className="mb-2 text-sm font-semibold text-gray-700">Original Message</h4>
-                                <p className="text-sm text-gray-900">{r.message_text}</p>
+                          <td colSpan="11" className="bg-slate-50 px-6 py-6 dark:bg-slate-800/50">
+                            <div className="grid gap-4 md:grid-cols-2">
+                              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                                <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-200">Resident message</h4>
+                                <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{r.message_text}</p>
                               </div>
 
-                              {/* User Selection Info */}
                               {r.user_selected_option_id && (
-                                <div className="rounded-lg bg-gradient-to-r from-green-50 to-emerald-50 p-4 shadow">
-                                  <h4 className="mb-2 text-sm font-semibold text-gray-700">✅ User Selection</h4>
-                                  <div className="flex items-center gap-3">
-                                    <span className="text-sm text-gray-900">
-                                      User selected: <strong>{r.user_selected_option_id}</strong>
-                                    </span>
-                                    {r.recommended_option_id && (
-                                      <>
-                                        <span className="text-gray-400">•</span>
-                                        {r.user_selected_option_id === r.recommended_option_id ? (
-                                          <span className="flex items-center gap-1 text-sm font-semibold text-green-600">
-                                            <CheckCircle2 className="h-4 w-4" />
-                                            Matches AI recommendation
-                                          </span>
-                                        ) : (
-                                          <span className="flex items-center gap-1 text-sm font-semibold text-orange-600">
-                                            ⚠️ AI recommended: {r.recommended_option_id}
-                                          </span>
-                                        )}
-                                      </>
-                                    )}
-                                  </div>
+                                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm dark:border-emerald-900/40 dark:bg-emerald-900/20">
+                                  <h4 className="text-sm font-semibold text-emerald-700 dark:text-emerald-200">Resident choice</h4>
+                                  <p className="mt-1 text-sm text-emerald-700 dark:text-emerald-100">
+                                    Selected option <strong>{r.user_selected_option_id}</strong>
+                                  </p>
+                                  {r.recommended_option_id && r.user_selected_option_id !== r.recommended_option_id && (
+                                    <p className="text-xs text-amber-600 dark:text-amber-300">AI suggested {r.recommended_option_id}</p>
+                                  )}
                                 </div>
                               )}
 
-                              {/* Simulation Options */}
                               {r.simulated_options && r.simulated_options.length > 0 && (
-                                <div>
-                                  <h4 className="mb-3 text-sm font-semibold text-gray-700">
-                                    🎯 Simulated Resolution Options
-                                  </h4>
-                                  <div className="grid gap-4 md:grid-cols-3">
-                                    {r.simulated_options.map((opt, idx) => {
+                                <div className="md:col-span-2">
+                                  <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-200">Simulated options</h4>
+                                  <div className="mt-3 grid gap-3 md:grid-cols-3">
+                                    {r.simulated_options.map((opt) => {
                                       const isRecommended = opt.option_id === r.recommended_option_id;
                                       const isUserSelected = opt.option_id === r.user_selected_option_id;
                                       return (
-                                      <div
-                                        key={opt.option_id}
-                                        className={`relative rounded-lg bg-white p-4 shadow-md transition-all hover:shadow-lg ${
-                                          isUserSelected ? "ring-2 ring-green-500" : ""
-                                        } ${isRecommended ? "ring-2 ring-yellow-400" : ""}`}
-                                      >
-                                        {isUserSelected && (
-                                          <div className="absolute -top-2 -right-2">
-                                            <span className="inline-flex items-center gap-1 rounded-full bg-green-500 px-2 py-1 text-xs font-bold text-white shadow-lg">
-                                              <CheckCircle2 className="h-3 w-3" />
-                                              SELECTED
-                                            </span>
-                                          </div>
-                                        )}
-                                        {isRecommended && !isUserSelected && (
-                                          <div className="absolute -top-2 -right-2">
-                                            <span className="inline-flex items-center gap-1 rounded-full bg-yellow-400 px-2 py-1 text-xs font-bold text-white shadow-lg">
-                                              <Star className="h-3 w-3 fill-current" />
-                                              AI PICK
-                                            </span>
-                                          </div>
-                                        )}
-                                        <div className="mb-3 flex items-center gap-2">
-                                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-r from-blue-500 to-purple-500 text-xs font-bold text-white">
-                                            {idx + 1}
-                                          </span>
-                                          <span className="text-xs font-semibold text-gray-500">
+                                        <div
+                                          key={opt.option_id}
+                                          className={`rounded-xl border border-slate-200 bg-white p-4 text-sm shadow-sm transition hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 ${
+                                            isRecommended ? "ring-2 ring-amber-400" : ""
+                                          } ${isUserSelected ? "ring-2 ring-emerald-400" : ""}`}
+                                        >
+                                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                                             {opt.option_id}
-                                          </span>
-                                        </div>
-                                        <h5 className="mb-3 text-sm font-bold text-gray-900">{opt.action}</h5>
-                                        <div className="space-y-2">
-                                          <div className="flex items-center justify-between text-xs">
-                                            <span className="flex items-center gap-1 text-gray-600">
-                                              <DollarSign className="h-3 w-3" />
-                                              Cost
-                                            </span>
-                                            <span className="font-semibold text-green-600">
-                                              ${parseFloat(opt.estimated_cost || 0).toFixed(2)}
-                                            </span>
-                                          </div>
-                                          <div className="flex items-center justify-between text-xs">
-                                            <span className="flex items-center gap-1 text-gray-600">
-                                              <Clock className="h-3 w-3" />
-                                              Time
-                                            </span>
-                                            <span className="font-semibold text-blue-600">
-                                              {parseFloat(opt.time_to_resolution || 0).toFixed(1)}h
-                                            </span>
-                                          </div>
-                                          <div className="flex items-center justify-between text-xs">
-                                            <span className="flex items-center gap-1 text-gray-600">
-                                              <Heart className="h-3 w-3" />
-                                              Satisfaction
-                                            </span>
-                                            <span className="font-semibold text-red-600">
-                                              {(parseFloat(opt.resident_satisfaction_impact || 0) * 100).toFixed(0)}%
-                                            </span>
+                                          </p>
+                                          <h5 className="mt-2 font-semibold text-slate-800 dark:text-slate-100">{opt.action}</h5>
+                                          <div className="mt-3 space-y-1 text-xs text-slate-600 dark:text-slate-300">
+                                            <p>Cost: ${parseFloat(opt.estimated_cost || 0).toFixed(2)}</p>
+                                            <p>Time: {parseFloat(opt.time_to_resolution || 0).toFixed(1)}h</p>
+                                            <p>Satisfaction: {Math.round((opt.resident_satisfaction_impact || 0) * 100)}%</p>
                                           </div>
                                         </div>
-                                      </div>
                                       );
                                     })}
                                   </div>
@@ -504,42 +476,43 @@ export default function AdminDashboard() {
           </div>
         )}
       </div>
+      </section>
       
       {/* Toast Notifications */}
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       
       {/* Resolve Modal */}
       {resolveModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-8 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-700 dark:bg-slate-900">
             <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-xl font-bold text-gray-900">Mark as Resolved (Admin)</h3>
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Mark as resolved</h3>
               <button
                 onClick={() => {
                   setResolveModal(null);
                   setResolutionNotes("");
                 }}
-                className="rounded-lg p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+                className="rounded-full p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
             
             <div className="mb-4">
-              <p className="mb-2 text-sm text-gray-600">Request:</p>
-              <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-900">
+              <p className="mb-2 text-sm text-slate-600 dark:text-slate-300">Request</p>
+              <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
                 {resolveModal.requestText}
               </p>
             </div>
             
             <div className="mb-6">
-              <label className="mb-2 block text-sm font-semibold text-gray-700">
-                Resolution Notes (Optional)
+              <label className="mb-2 block text-sm font-semibold text-slate-700 dark:text-slate-200">
+                Resolution notes (optional)
               </label>
               <textarea
                 rows={4}
-                className="w-full rounded-lg border-2 border-gray-200 px-4 py-3 text-sm transition-all focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                placeholder="Add any notes about how the issue was resolved..."
+                className="w-full rounded-lg border border-slate-300 px-4 py-3 text-sm text-slate-900 focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-400 dark:focus:ring-slate-800"
+                placeholder="Add notes for the team (optional)"
                 value={resolutionNotes}
                 onChange={(e) => setResolutionNotes(e.target.value)}
               />
@@ -551,16 +524,16 @@ export default function AdminDashboard() {
                   setResolveModal(null);
                   setResolutionNotes("");
                 }}
-                className="flex-1 rounded-lg border-2 border-gray-300 px-4 py-2 font-semibold text-gray-700 transition-all hover:bg-gray-50"
+                className="flex-1 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-200 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800 dark:focus:ring-slate-700"
               >
                 Cancel
               </button>
               <button
                 onClick={handleResolve}
                 disabled={resolving}
-                className="flex-1 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 px-4 py-2 font-semibold text-white shadow-md transition-all hover:from-green-600 hover:to-emerald-600 disabled:opacity-50"
+                className="flex-1 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200 disabled:opacity-60 dark:bg-emerald-400 dark:text-emerald-950 dark:hover:bg-emerald-300"
               >
-                {resolving ? "Processing..." : "Confirm Resolution"}
+                {resolving ? "Processing..." : "Confirm resolution"}
               </button>
             </div>
           </div>
