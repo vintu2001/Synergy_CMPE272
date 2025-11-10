@@ -43,4 +43,22 @@ export async function submitRequest(residentId, messageText, category = null, ur
   return data;
 }
 
+export async function selectOption(requestId, selectedOptionId) {
+  const { data } = await apiClient.post("/api/v1/select-option", {
+    request_id: requestId,
+    selected_option_id: selectedOptionId,
+  });
+  return data;
+}
+
+export async function resolveRequest(requestId, resolvedBy, resolutionNotes = null) {
+  const payload = {
+    request_id: requestId,
+    resolved_by: resolvedBy,
+  };
+  if (resolutionNotes) payload.resolution_notes = resolutionNotes;
+  
+  const { data } = await apiClient.post("/api/v1/resolve-request", payload);
+  return data;
+}
 
