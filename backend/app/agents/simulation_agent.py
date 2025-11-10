@@ -393,7 +393,7 @@ class ResolutionSimulator:
         
         # If this is a repeat issue, escalate urgency to get better options
         if is_repeat_issue:
-            logger.info(f"🔁 Repeat issue detected - escalating to permanent solutions")
+            logger.info(f"Repeat issue detected - escalating to permanent solutions")
             if urgency_key == "Low":
                 urgency_key = "Medium"
             elif urgency_key == "Medium":

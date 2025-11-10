@@ -23,31 +23,20 @@ pc = None
 index = None
 
 def initialize_pinecone():
-    """Initialize Pinecone connection and create index if needed"""
     global pc, index
-    
-    print(f"🔍 DEBUG: PINECONE_API_KEY value: {PINECONE_API_KEY[:20] if PINECONE_API_KEY else 'None'}...")
-    print(f"🔍 DEBUG: PINECONE_ENVIRONMENT: {PINECONE_ENVIRONMENT}")
-    
     if not PINECONE_API_KEY or PINECONE_API_KEY == "your_pinecone_api_key_here":
         logger.warning("PINECONE_API_KEY not set - vector similarity disabled")
-        print("❌ Pinecone API key is missing or not configured")
         return False
     
     try:
         # Initialize Pinecone
-        print(f"🔄 Initializing Pinecone client...")
         pc = Pinecone(api_key=PINECONE_API_KEY)
-        print(f"✓ Pinecone client initialized")
         
         # Check if index exists, create if not
-        print(f"🔄 Checking for existing indexes...")
         existing_indexes = [idx.name for idx in pc.list_indexes()]
-        print(f"✓ Found {len(existing_indexes)} existing indexes: {existing_indexes}")
         
         if INDEX_NAME not in existing_indexes:
             logger.info(f"Creating Pinecone index: {INDEX_NAME}")
-            print(f"🔄 Creating new index: {INDEX_NAME}")
             pc.create_index(
                 name=INDEX_NAME,
                 dimension=384,  # all-MiniLM-L6-v2 produces 384-dim vectors
@@ -57,22 +46,15 @@ def initialize_pinecone():
                     region=PINECONE_ENVIRONMENT
                 )
             )
-            logger.info(f"✓ Created index: {INDEX_NAME}")
-            print(f"✓ Created index: {INDEX_NAME}")
+            logger.info(f"Created index: {INDEX_NAME}")
         
         # Connect to index
-        print(f"🔄 Connecting to index: {INDEX_NAME}")
         index = pc.Index(INDEX_NAME)
-        logger.info(f"✓ Connected to Pinecone index: {INDEX_NAME}")
-        print(f"✓ Connected to Pinecone index: {INDEX_NAME}")
+        logger.info(f"Connected to Pinecone index: {INDEX_NAME}")
         return True
         
     except Exception as e:
         logger.error(f"Failed to initialize Pinecone: {e}")
-        print(f"❌ Failed to initialize Pinecone: {e}")
-        print(f"   Error type: {type(e).__name__}")
-        import traceback
-        traceback.print_exc()
         return False
 
 
@@ -83,19 +65,6 @@ def add_issue_to_vector_db(
     category: str,
     created_at: str
 ) -> bool:
-    """
-    Store a maintenance issue in the vector database.
-    
-    Args:
-        request_id: Unique request ID
-        message_text: The resident's message
-        resident_id: Resident identifier
-        category: Issue category
-        created_at: ISO timestamp
-        
-    Returns:
-        True if successful, False otherwise
-    """
     if not index:
         logger.warning("Pinecone not initialized - skipping vector storage")
         return False
@@ -116,7 +85,7 @@ def add_issue_to_vector_db(
             }
         }])
         
-        logger.info(f"✓ Stored embedding for request {request_id}")
+        logger.info(f"Stored embedding for request {request_id}")
         return True
         
     except Exception as e:
@@ -131,19 +100,6 @@ def find_similar_issues(
     similarity_threshold: float = 0.75,
     top_k: int = 10
 ) -> Dict[str, Any]:
-    """
-    Find similar past issues for a specific resident in the same category.
-    
-    Args:
-        message_text: Current message to check
-        resident_id: Resident to search for
-        category: Issue category to filter by
-        similarity_threshold: Minimum similarity score (0.0-1.0)
-        top_k: Maximum number of results to return
-        
-    Returns:
-        Dict with is_repeat, repeat_count, and similar_issues list
-    """
     if not index:
         logger.warning("Pinecone not initialized - using fallback")
         return {
@@ -207,7 +163,6 @@ def find_similar_issues(
 
 
 def get_vector_db_stats() -> Dict[str, Any]:
-    """Get statistics about the vector database"""
     if not index:
         return {'status': 'not_initialized'}
     

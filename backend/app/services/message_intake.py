@@ -48,7 +48,7 @@ async def submit_request(request: MessageRequest):
     Submit a resident request with automatic classification, risk prediction, and resolution simulation.
     """
     try:
-        logger.info(f"🔵 SUBMIT REQUEST STARTED for resident: {request.resident_id}")
+        logger.info(f"Processing request for resident: {request.resident_id}")
         _normalized_text = normalize_text(request.message_text)
         
         # Step 1: Classification
@@ -57,47 +57,32 @@ async def submit_request(request: MessageRequest):
         final_category = request.category if request.category else classification.category
         final_urgency = request.urgency if request.urgency else classification.urgency
         
-        # Step 1.5: Check for repeat issues using VECTOR SIMILARITY (NEW)
-        print(f"\n🔍 CHECKING VECTOR SIMILARITY for {request.resident_id}")
-        print(f"Message: {request.message_text[:50]}...")
-        
+        # Check for repeat issues using vector similarity
         repeat_check = find_similar_issues(
             message_text=request.message_text,
             resident_id=request.resident_id,
             category=final_category.value,
-            similarity_threshold=0.75  # 75% similar = repeat
+            similarity_threshold=0.75
         )
         is_repeat = repeat_check.get('is_repeat_issue', False)
         repeat_count = repeat_check.get('repeat_count', 0)
         similar_issues = repeat_check.get('similar_issues', [])
         
-        print(f"Vector search method: {repeat_check.get('method')}")
-        print(f"Is repeat: {is_repeat}, Count: {repeat_count}")
-        
         if is_repeat:
-            print(f"🔁 VECTOR SIMILARITY: Repeat issue detected!")
-            print(f"   Resident: {request.resident_id}")
-            print(f"   Similar issues: {repeat_count} in {final_category}")
-            print(f"   Request IDs: {[s['request_id'] for s in similar_issues]}")
-            scores = [f"{s['similarity_score']*100:.1f}%" for s in similar_issues]
-            print(f"   Similarity scores: {scores}")
             logger.info(
-                f"🔁 VECTOR SIMILARITY: Repeat issue detected for {request.resident_id}: "
+                f"Repeat issue detected for {request.resident_id}: "
                 f"{repeat_count} similar {final_category} issues found"
             )
             logger.info(f"Similar issues: {[s['request_id'] for s in similar_issues]}")
-        else:
-            print(f"✓ No similar issues found (threshold: 75%)")
         
         # Fallback to category-based detection if vector search not available
         if repeat_check.get('method') == 'fallback':
-            print("⚠️ Vector DB not available - using category-based fallback")
             logger.info("Vector DB not available - using category-based fallback")
             fallback_check = check_resident_repeat_issues(request.resident_id, final_category, days=30)
             is_repeat = fallback_check.get('is_repeat_issue', False)
             repeat_count = fallback_check.get('repeat_count', 0)
         
-        # Step 2: Risk Prediction
+        # Risk Prediction
         risk_result = None
         risk_score = None
         try:
@@ -114,7 +99,7 @@ async def submit_request(request: MessageRequest):
         except Exception as risk_error:
             logger.warning(f"Risk prediction failed (non-critical): {risk_error}")
         
-        # Step 3: Simulation - Generate resolution options
+        # Generate resolution options
         simulation_result = None
         simulated_options = None
         try:
@@ -122,7 +107,7 @@ async def submit_request(request: MessageRequest):
                 category=final_category,
                 urgency=final_urgency,
                 risk_score=risk_score if risk_score is not None else 0.5,
-                is_repeat_issue=is_repeat  # Pass repeat detection result
+                is_repeat_issue=is_repeat
             )
             
             # Convert to dict for storage
@@ -163,9 +148,7 @@ async def submit_request(request: MessageRequest):
             updated_at=now
         )
         
-        logger.info(f"🔵 About to call create_request for {request_id}")
         success = create_request(resident_request)
-        logger.info(f"🔵 create_request returned: {success}")
         
         if not success:
             raise HTTPException(status_code=500, detail="Failed to save request to database")
@@ -179,9 +162,9 @@ async def submit_request(request: MessageRequest):
                 category=final_category.value,
                 created_at=now.isoformat()
             )
-            logger.info(f"✓ Stored embedding in vector DB for {request_id}")
+            logger.info(f"Stored embedding in vector DB for {request_id}")
         except Exception as vec_error:
-            logger.warning(f"Vector DB storage failed (non-critical): {vec_error}")
+            logger.warning(f"Vector DB storage failed: {vec_error}")
         
         if sqs and SQS_URL:
             try:
@@ -202,7 +185,7 @@ async def submit_request(request: MessageRequest):
         
         response_data = {
             "status": "submitted",
-            "message": "Request submitted successfully!" + (f" (⚠️ Repeat issue detected: {repeat_count} similar issues in 30 days)" if is_repeat else ""),
+            "message": "Request submitted successfully!" + (f" (Repeat issue detected: {repeat_count} similar issues)" if is_repeat else ""),
             "request_id": request_id,
             "is_repeat_issue": is_repeat,
             "repeat_count": repeat_count,
@@ -220,14 +203,14 @@ async def submit_request(request: MessageRequest):
         
         # Add simulation results if available
         if simulation_result:
-            # Step 4: Get AI recommendation (but don't execute yet)
+            # Get AI recommendation (but don't execute yet)
             recommended_option_id = None
             try:
                 # For repeat issues, always recommend the best (highest satisfaction) option
                 if is_repeat and simulation_result.options:
                     best_option = max(simulation_result.options, key=lambda x: x.resident_satisfaction_impact)
                     recommended_option_id = best_option.option_id
-                    logger.info(f"🔁 Repeat issue - recommending best option: {recommended_option_id}")
+                    logger.info(f"Repeat issue - recommending best option: {recommended_option_id}")
                 else:
                     # Normal flow: use decision agent
                     decision_request = DecisionRequest(

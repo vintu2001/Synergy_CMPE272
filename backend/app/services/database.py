@@ -41,42 +41,26 @@ def convert_floats_to_decimal(obj: Any) -> Any:
 
 def create_request(request: ResidentRequest) -> bool:
     try:
-        print(f"\n🔵 CREATE_REQUEST CALLED 🔵")
-        print(f"Resident ID: {request.resident_id}")
-        print(f"Category: {request.category}")
-        print(f"Message: {request.message_text[:50]}...")
-        
         table = get_table()
-        # Convert the request to dict and convert floats to Decimal
         item = request.dict()
-        print(f"Item keys: {list(item.keys())}")
-        logger.info(f"Creating request with keys: {list(item.keys())}")
-        logger.info(f"Request data: resident_id={item.get('resident_id')}, category={item.get('category')}")
+        logger.info(f"Creating request: {item.get('request_id')}")
         
         item = convert_floats_to_decimal(item)
-        # Convert datetime objects to ISO format strings
         if 'created_at' in item and isinstance(item['created_at'], datetime):
             item['created_at'] = item['created_at'].isoformat()
         if 'updated_at' in item and isinstance(item['updated_at'], datetime):
             item['updated_at'] = item['updated_at'].isoformat()
         
-        print(f"Storing to table: {TABLE_NAME}")
-        logger.info(f"Storing item to DynamoDB table: {TABLE_NAME}")
         table.put_item(Item=item)
-        print(f"✅ SUCCESS - Stored {item.get('request_id')} to DynamoDB\n")
-        logger.info(f"✓ Successfully stored request {item.get('request_id')} to DynamoDB")
+        logger.info(f"Successfully stored request {item.get('request_id')} to DynamoDB")
         return True
     except ClientError as e:
-        print(f"❌ DYNAMODB ERROR: {e}")
-        print(f"Error response: {e.response}")
-        logger.error(f"✗ ClientError creating request: {e}")
+        logger.error(f"ClientError creating request: {e}")
         logger.error(f"Error details: {e.response}")
         return False
     except Exception as e:
-        print(f"❌ UNEXPECTED ERROR: {e}")
-        logger.error(f"✗ Unexpected error creating request: {e}")
+        logger.error(f"Unexpected error creating request: {e}")
         import traceback
-        traceback.print_exc()
         logger.error(traceback.format_exc())
         return False
 
@@ -185,13 +169,11 @@ def check_resident_repeat_issues(resident_id: str, category: str, days: int = 30
         response = table.scan()
         items = response.get('Items', [])
         
-        # Convert category to string if it's an enum
         category_str = category.value if hasattr(category, 'value') else str(category)
         
         logger.info(f"Checking repeat issues for resident {resident_id}, category {category_str}")
         logger.info(f"Total items in DB: {len(items)}")
         
-        # Filter by resident_id, category, and date
         cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
         resident_issues = []
         
@@ -199,7 +181,6 @@ def check_resident_repeat_issues(resident_id: str, category: str, days: int = 30
             item_category = item.get('category')
             item_resident = item.get('resident_id')
             
-            # Handle category comparison (could be string or enum value)
             if hasattr(item_category, 'value'):
                 item_category = item_category.value
             item_category = str(item_category) if item_category else None
@@ -211,7 +192,6 @@ def check_resident_repeat_issues(resident_id: str, category: str, days: int = 30
                 created_at = item.get('created_at')
                 if created_at:
                     try:
-                        # Parse ISO format datetime
                         request_date = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
                         if request_date >= cutoff_date:
                             resident_issues.append({
@@ -224,7 +204,7 @@ def check_resident_repeat_issues(resident_id: str, category: str, days: int = 30
                         logger.error(f"Date parsing error: {e}")
                         continue
         
-        is_repeat = len(resident_issues) >= 2  # 2 or more = repeat issue
+        is_repeat = len(resident_issues) >= 2
         logger.info(f"Found {len(resident_issues)} previous issues, is_repeat: {is_repeat}")
         
         return {
@@ -255,7 +235,6 @@ def get_dashboard_metrics() -> Dict[str, Any]:
         response = table.scan()
         items = response.get('Items', [])
         
-        # Calculate metrics
         total = len(items)
         by_category = {}
         by_urgency = {}
