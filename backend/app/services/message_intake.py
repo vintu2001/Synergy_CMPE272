@@ -75,32 +75,85 @@ async def submit_request(request: MessageRequest):
         # Step 3: Simulation - Generate resolution options
         simulation_result = None
         simulated_options = None
+        llm_generation_failed = False
+        llm_error_message = None
+        
         try:
-            simulation_options = simulator.generate_options(
+            # Get resident history for context
+            from app.services.database import get_requests_by_resident
+            resident_history = get_requests_by_resident(request.resident_id)
+            resident_history_dicts = [
+                {
+                    'category': req.category.value if hasattr(req.category, 'value') else str(req.category),
+                    'urgency': req.urgency.value if hasattr(req.urgency, 'value') else str(req.urgency),
+                    'message_text': req.message_text,
+                    'status': req.status.value if hasattr(req.status, 'value') else str(req.status),
+                    'created_at': req.created_at.isoformat() if isinstance(req.created_at, datetime) else str(req.created_at)
+                }
+                for req in resident_history[-5:]  # Last 5 requests
+            ]
+            
+            # Generate options using AGENTIC approach (LLM + Tools)
+            simulation_options = await simulator.generate_options(
                 category=final_category,
                 urgency=final_urgency,
-                risk_score=risk_score if risk_score is not None else 0.5
+                message_text=request.message_text,
+                resident_id=request.resident_id,
+                risk_score=risk_score if risk_score is not None else 0.5,
+                resident_history=resident_history_dicts if resident_history_dicts else None
             )
             
-            # Convert to dict for storage
+            # Convert to dict for storage (including details for UI dropdown)
             simulated_options = [
                 {
                     "option_id": opt.option_id,
                     "action": opt.action,
                     "estimated_cost": opt.estimated_cost,
                     "time_to_resolution": opt.time_to_resolution,
-                    "resident_satisfaction_impact": opt.resident_satisfaction_impact
+                    "resident_satisfaction_impact": opt.resident_satisfaction_impact,
+                    "details": opt.details  # Include detailed breakdown for UI
                 }
                 for opt in simulation_options
             ]
             
             simulation_result = SimulationResponse(
                 options=simulation_options,
-                issue_id=f"sim_{final_category.value}_{final_urgency.value}"
+                issue_id=f"agentic_{final_category.value}_{final_urgency.value}_{request.resident_id}"
             )
-            logger.info(f"Simulation generated {len(simulated_options)} options")
+            logger.info(f"Agentic simulation generated {len(simulated_options)} options")
+        
+        except HTTPException as http_error:
+            # LLM generation failed - capture error for user display
+            llm_generation_failed = True
+            error_detail = http_error.detail if isinstance(http_error.detail, dict) else {'user_message': str(http_error.detail)}
+            llm_error_message = error_detail.get('user_message', 'Unable to generate resolution options.')
+            logger.error(f"LLM generation failed: {llm_error_message}")
+        
         except Exception as sim_error:
-            logger.warning(f"Simulation failed (non-critical): {sim_error}")
+            # Unexpected error
+            llm_generation_failed = True
+            llm_error_message = 'We encountered an unexpected error while analyzing your request. Please escalate this issue to a human administrator.'
+            logger.error(f"Simulation failed with unexpected error: {sim_error}")
+        
+        # If LLM generation failed, return error response immediately
+        if llm_generation_failed:
+            return {
+                "status": "error",
+                "error_type": "LLM_GENERATION_FAILED",
+                "message": llm_error_message,
+                "escalation_required": True,
+                "classification": {
+                    "category": final_category.value,
+                    "urgency": final_urgency.value,
+                    "intent": classification.intent.value,
+                    "confidence": classification.confidence
+                },
+                "risk_assessment": {
+                    "risk_forecast": risk_score,
+                    "risk_level": "High" if risk_score and risk_score > 0.7 else "Medium" if risk_score and risk_score > 0.3 else "Low" if risk_score else "Unknown"
+                } if risk_score is not None else None,
+                "action_required": "Please escalate this request to a human administrator using the 'Escalate to Human' option."
+            }
         
         request_id = generate_request_id()
         now = datetime.now(timezone.utc)

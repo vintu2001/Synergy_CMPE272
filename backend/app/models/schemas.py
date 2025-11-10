@@ -64,6 +64,7 @@ class SimulatedOption(BaseModel):
     estimated_cost: float
     time_to_resolution: float = Field(..., description="Hours to resolve")
     resident_satisfaction_impact: float = Field(..., ge=0.0, le=1.0)
+    details: Optional[List[Dict[str, Any]]] = Field(None, description="Detailed step-by-step breakdown for UI dropdown")
 
 
 class SimulationResponse(BaseModel):

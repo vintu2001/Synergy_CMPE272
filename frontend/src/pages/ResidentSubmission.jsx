@@ -4,7 +4,7 @@ import { classifyMessage, submitRequest, selectOption } from "../services/api";
 import { useUser } from "../context/UserContext";
 import LoadingSpinner from "../components/LoadingSpinner";
 import Toast from "../components/Toast";
-import { Sparkles, Send, AlertCircle, CheckCircle2, Clock, Zap, DollarSign, Heart, Star, UserX } from "lucide-react";
+import { Sparkles, Send, AlertCircle, CheckCircle2, Clock, Zap, DollarSign, Heart, Star, UserX, ChevronDown, ChevronUp, Info } from "lucide-react";
 
 const categoryStyles = {
   Maintenance: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-200",
@@ -45,6 +45,7 @@ export default function ResidentSubmission() {
   // NEW: State for option selection flow
   const [submittedResult, setSubmittedResult] = useState(null); // Stores result after submit
   const [selectingOption, setSelectingOption] = useState(false); // Loading state for option selection
+  const [expandedOptionId, setExpandedOptionId] = useState(null); // Track which option's details are expanded
 
   const charCount = useMemo(() => messageText.length || 0, [messageText]);
 
@@ -99,7 +100,22 @@ export default function ResidentSubmission() {
       const urgency = watch("urgency") || analysis?.urgency;
       const result = await submitRequest(residentId, messageText, category, urgency);
       
-      // NEW: Store result and show option selection (instead of immediate reset)
+      // Check if LLM generation failed
+      if (result.status === "error") {
+        setError(result.message);
+        setToast({
+          message: result.message,
+          type: "error"
+        });
+        
+        // Show escalation message in a modal or alert
+        setTimeout(() => {
+          alert(`⚠️ LLM Generation Failed\n\n${result.message}\n\n${result.action_required}\n\nPlease use the "Escalate to Human" option.`);
+        }, 500);
+        return;
+      }
+      
+      // Store result and show option selection
       setSubmittedResult(result);
       setToast({
         message: `Request classified! Please select a resolution option.`,
@@ -483,6 +499,73 @@ export default function ResidentSubmission() {
                           </span>
                         </div>
                       </div>
+
+                      {/* Details Dropdown */}
+                      {option.details && option.details.length > 0 && (
+                        <div className="mb-4">
+                          <button
+                            onClick={() => setExpandedOptionId(expandedOptionId === option.option_id ? null : option.option_id)}
+                            className="flex w-full items-center justify-between rounded-lg border-2 border-gray-200 bg-gray-50 px-4 py-2 text-sm font-medium text-gray-700 transition-all hover:bg-gray-100 hover:border-gray-300"
+                          >
+                            <span className="flex items-center gap-2">
+                              <Info className="h-4 w-4" />
+                              View Details
+                            </span>
+                            {expandedOptionId === option.option_id ? (
+                              <ChevronUp className="h-4 w-4" />
+                            ) : (
+                              <ChevronDown className="h-4 w-4" />
+                            )}
+                          </button>
+                          
+                          {expandedOptionId === option.option_id && (
+                            <div className="mt-3 space-y-3 rounded-lg border-2 border-blue-100 bg-blue-50 p-4">
+                              {option.details.map((detail, idx) => (
+                                <div key={idx} className="border-l-4 border-blue-500 pl-3">
+                                  <div className="mb-1 flex items-start justify-between">
+                                    <span className="font-semibold text-gray-900">{detail.title}</span>
+                                    {detail.status && (
+                                      <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${
+                                        detail.status === 'immediate' 
+                                          ? 'bg-red-100 text-red-700' 
+                                          : 'bg-blue-100 text-blue-700'
+                                      }`}>
+                                        {detail.status}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-sm text-gray-700">{detail.description}</p>
+                                  <div className="mt-2 flex gap-4 text-xs text-gray-600">
+                                    {detail.time && (
+                                      <span className="flex items-center gap-1">
+                                        <Clock className="h-3 w-3" />
+                                        {detail.time}
+                                      </span>
+                                    )}
+                                    {detail.cost && (
+                                      <span className="flex items-center gap-1">
+                                        <DollarSign className="h-3 w-3" />
+                                        {detail.cost}
+                                      </span>
+                                    )}
+                                    {detail.risk && (
+                                      <span className={`rounded-full px-2 py-0.5 font-semibold ${
+                                        detail.risk === 'high' 
+                                          ? 'bg-red-100 text-red-700' 
+                                          : detail.risk === 'medium'
+                                          ? 'bg-yellow-100 text-yellow-700'
+                                          : 'bg-green-100 text-green-700'
+                                      }`}>
+                                        {detail.risk} risk
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       <button
                         onClick={() => handleSelectOption(option.option_id)}
