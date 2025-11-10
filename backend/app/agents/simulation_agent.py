@@ -383,12 +383,22 @@ class ResolutionSimulator:
         self, 
         category: IssueCategory, 
         urgency: Urgency,
-        risk_score: float = 0.5
+        risk_score: float = 0.5,
+        is_repeat_issue: bool = False
     ) -> List[SimulatedOption]:
         """Generate resolution options based on category, urgency, and risk score."""
         
         category_key = category.value
         urgency_key = urgency.value
+        
+        # If this is a repeat issue, escalate urgency to get better options
+        if is_repeat_issue:
+            logger.info(f"🔁 Repeat issue detected - escalating to permanent solutions")
+            if urgency_key == "Low":
+                urgency_key = "Medium"
+            elif urgency_key == "Medium":
+                urgency_key = "High"
+            # High stays High but will prioritize more expensive/permanent options
         
         templates = self.option_templates.get(category_key, {}).get(urgency_key, [])
         
@@ -399,6 +409,10 @@ class ResolutionSimulator:
         for idx, template in enumerate(templates, 1):
             simulated = self.simulate_resolution_process(template, risk_score)
             
+            # For repeat issues, boost satisfaction for more permanent/expensive options
+            if is_repeat_issue and simulated['cost'] > 200:
+                simulated['satisfaction'] = min(1.0, simulated['satisfaction'] * 1.1)
+            
             option = SimulatedOption(
                 option_id=f"opt_{category_key.lower()}_{urgency_key.lower()}_{idx}",
                 action=template['action'],
@@ -407,6 +421,10 @@ class ResolutionSimulator:
                 resident_satisfaction_impact=round(simulated['satisfaction'], 2)
             )
             options.append(option)
+        
+        # For repeat issues, sort by satisfaction (higher = more permanent solution)
+        if is_repeat_issue:
+            options.sort(key=lambda x: x.resident_satisfaction_impact, reverse=True)
         
         return options
 
