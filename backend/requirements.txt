@@ -1,12 +1,11 @@
 # FastAPI and web server
 fastapi==0.115.4
-uvicorn[standard]==0.32.0
+uvicorn==0.32.0
 pydantic==2.10.1
 python-multipart==0.0.12
 
 # AWS SDK
 boto3==1.35.0
-botocore==1.35.0
 
 # HTTP client
 httpx==0.27.2
@@ -14,26 +13,21 @@ requests==2.32.3
 
 # LLM APIs
 google-generativeai==0.8.3
-# huggingface-hub==0.19.4  # Uncomment if using Hugging Face
 
-# ML Libraries (Ticket 8 & 9)
-xgboost==3.1.1
-scikit-learn==1.7.2
-pandas==2.3.3
-numpy==2.3.4
-joblib==1.5.2
+# ML Libraries (full stack)
+xgboost==2.0.3
+scikit-learn==1.4.2
+pandas==2.2.2
+numpy==1.26.4
+joblib==1.4.2
 
-# Database
-# dynamodb-json==1.3.0  # For DynamoDB operations
+# Simulation
+simpy==4.1.1
 
 # Utilities
 python-dotenv==1.0.1
 python-dateutil==2.9.0
 
-# Logging and monitoring
-# ibm-watson-machine-learning==1.0.328  # For Watsonx.governance
-
-# Testing (development)
+# Testing (optional)
 pytest==8.3.3
 pytest-asyncio==0.24.0
-
