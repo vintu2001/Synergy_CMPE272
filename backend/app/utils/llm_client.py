@@ -87,7 +87,8 @@ class LLMClient:
         risk_score: float,
         resident_id: str,
         resident_history: Optional[List[Dict]] = None,
-        tools_data: Optional[Dict[str, Any]] = None
+        tools_data: Optional[Dict[str, Any]] = None,
+        rag_context: Optional[Any] = None  # RAG integration
     ) -> Dict[str, Any]:
         """
         Generate resolution options using LLM with full context.
@@ -100,6 +101,7 @@ class LLMClient:
             resident_id: Resident identifier
             resident_history: Past requests from this resident
             tools_data: Real-time data from tools (availability, weather, etc.)
+            rag_context: Retrieved documents from knowledge base (RAG)
         
         Returns:
             Dict with 'options' list or 'error' dict
@@ -122,7 +124,7 @@ class LLMClient:
         try:
             # Use simplified prompt to avoid safety blocks
             prompt = self._build_simple_prompt(
-                message_text, category, urgency, risk_score
+                message_text, category, urgency, risk_score, rag_context
             )
             
             response = self.model.generate_content(
@@ -243,12 +245,24 @@ class LLMClient:
         message_text: str,
         category: str,
         urgency: str,
-        risk_score: float
+        risk_score: float,
+        rag_context: Optional[Any] = None
     ) -> str:
         """Build minimal prompt to avoid safety blocks while still being effective."""
-        return f"""Generate 3 resolution options for: "{message_text}"
+        
+        # Build RAG context section if available
+        rag_section = ""
+        if rag_context and hasattr(rag_context, 'retrieved_docs') and rag_context.retrieved_docs:
+            rag_section = "\n\nRelevant KB Documents:\n"
+            for i, doc in enumerate(rag_context.retrieved_docs[:3], 1):  # Top 3 docs
+                doc_id = doc.get('doc_id', 'N/A')
+                text_preview = doc.get('text', '')[:200]  # First 200 chars
+                rag_section += f"{i}. [{doc_id}] {text_preview}...\n"
+            rag_section += "\nUse these KB documents to inform your options. Cite doc IDs when relevant.\n"
+        
+        prompt = f"""Generate 3 resolution options for: "{message_text}"
 Category: {category}, Urgency: {urgency}
-
+{rag_section}
 Return JSON with 3 options (fast/standard/budget):
 - option_id: "opt_1", "opt_2", "opt_3"
 - action: brief description (max 2 sentences)
@@ -258,6 +272,8 @@ Return JSON with 3 options (fast/standard/budget):
 - reasoning: brief reason (max 1 sentence)
 
 Keep action and reasoning SHORT."""
+        
+        return prompt
     
     def _build_agentic_prompt(
         self,
@@ -267,7 +283,8 @@ Keep action and reasoning SHORT."""
         risk_score: float,
         resident_id: str,
         resident_history: Optional[List[Dict]],
-        tools_data: Optional[Dict[str, Any]]
+        tools_data: Optional[Dict[str, Any]],
+        rag_context: Optional[Any] = None
     ) -> str:
         """Build comprehensive agentic prompt with all context."""
         
@@ -297,6 +314,20 @@ Keep action and reasoning SHORT."""
             if 'past_solutions' in tools_data:
                 tools_context += f"\n- Similar Past Solutions: {tools_data['past_solutions']}"
         
+        # Build RAG context from knowledge base
+        rag_section = ""
+        if rag_context and hasattr(rag_context, 'retrieved_docs') and rag_context.retrieved_docs:
+            rag_section = "\n\n=== KNOWLEDGE BASE DOCUMENTS ===\n"
+            rag_section += "The following documents were retrieved from our knowledge base based on this issue:\n\n"
+            for i, doc in enumerate(rag_context.retrieved_docs, 1):
+                doc_id = doc.get('doc_id', 'Unknown')
+                doc_type = doc.get('type', 'document')
+                text = doc.get('text', '')
+                score = doc.get('score', 0)
+                rag_section += f"{i}. [{doc_id}] (relevance: {score:.2f}, type: {doc_type})\n"
+                rag_section += f"   {text[:300]}...\n\n"
+            rag_section += "IMPORTANT: Use these KB documents to inform your decisions. Reference doc IDs in your reasoning when applicable.\n"
+        
         prompt = f"""You are an expert AI apartment management agent with advanced reasoning capabilities.
 
 MISSION: Generate 3 distinct, context-specific resolution options for this resident's issue.
@@ -311,6 +342,7 @@ Risk Score: {risk_score:.2f}/1.0 (0=low risk, 1=high risk)
 === RESIDENT HISTORY ===
 {history_context if history_context else "No previous issues on record."}
 {tools_context}
+{rag_section}
 
 === YOUR TASK ===
 As an intelligent agent, you must:

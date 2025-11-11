@@ -55,6 +55,15 @@ async def submit_request(request: MessageRequest):
         final_category = request.category if request.category else classification.category
         final_urgency = request.urgency if request.urgency else classification.urgency
         
+        # Extract building_id from resident_id for RAG retrieval
+        # Format: RES_BuildingXYZ_1001 -> BuildingXYZ
+        building_id = None
+        if request.resident_id and request.resident_id.startswith('RES_'):
+            parts = request.resident_id.split('_')
+            if len(parts) >= 3:
+                building_id = parts[1]
+                logger.info(f"Extracted building_id: {building_id} from resident_id: {request.resident_id}")
+        
         # Step 2: Risk Prediction
         risk_result = None
         risk_score = None

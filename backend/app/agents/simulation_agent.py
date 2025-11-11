@@ -9,8 +9,10 @@ from app.utils.llm_client import llm_client
 from app.agents.tools import agent_tools
 from app.agents.reasoning_engine import multi_step_reasoner  # Level 3
 from app.agents.learning_engine import learning_engine  # Level 4
+from app.rag.retriever import retrieve_relevant_docs  # RAG integration
 from typing import List, Dict, Any, Optional
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -128,7 +130,42 @@ class AgenticResolutionSimulator:
                     logger.info(f"Generated {len(options)} phased options from multi-step reasoning")
                     return options
             
-            # Step 5: Generate options using LLM with full context (Level 1)
+            # Step 5: Retrieve relevant documents from knowledge base (RAG integration)
+            rag_context = None
+            building_id = None
+            
+            # Extract building_id from resident_id (format: RES_BuildingXYZ_1001)
+            if resident_id and resident_id.startswith('RES_'):
+                parts = resident_id.split('_')
+                if len(parts) >= 3:
+                    building_id = parts[1]
+                    logger.info(f"Extracted building_id: {building_id} from resident_id: {resident_id}")
+            
+            # Check if RAG is enabled
+            rag_enabled = os.getenv('RAG_ENABLED', 'false').lower() == 'true'
+            
+            if rag_enabled:
+                try:
+                    # Retrieve relevant documents for simulation context
+                    rag_context = await retrieve_relevant_docs(
+                        query=message_text,
+                        category=category.value,
+                        building_id=building_id,
+                        top_k=int(os.getenv('RAG_TOP_K', '5'))
+                    )
+                    
+                    if rag_context:
+                        logger.info(f"RAG retrieval successful: {rag_context.total_retrieved} documents retrieved")
+                    else:
+                        logger.info("RAG retrieval returned no context (RAG may be disabled or unavailable)")
+                
+                except Exception as e:
+                    logger.warning(f"RAG retrieval failed: {e}. Continuing without RAG context.")
+                    rag_context = None
+            else:
+                logger.info("RAG is disabled (RAG_ENABLED=false)")
+            
+            # Step 6: Generate options using LLM with full context (Level 1)
             # This is used for non-complex issues or as fallback
             llm_response = await self.llm_client.generate_options(
                 message_text=message_text,
@@ -137,7 +174,8 @@ class AgenticResolutionSimulator:
                 risk_score=risk_score,
                 resident_id=resident_id,
                 resident_history=resident_history,
-                tools_data=tools_data
+                tools_data=tools_data,
+                rag_context=rag_context  # Pass RAG context to LLM
             )
             
             # Check for errors
@@ -156,7 +194,21 @@ class AgenticResolutionSimulator:
                     }
                 )
             
-            # Step 3: Convert LLM response to SimulatedOption objects
+            # Step 7: Convert LLM response to SimulatedOption objects
+            # Extract source document IDs from RAG context
+            source_doc_ids = []
+            if rag_context and rag_context.retrieved_docs:
+                # Collect all document IDs from retrieved context
+                source_doc_ids = [doc['doc_id'] for doc in rag_context.retrieved_docs if 'doc_id' in doc]
+            
+            # Step 7.1: Check for RAG fallback - if RAG enabled but no documents retrieved
+            # This indicates the system lacks knowledge base context for this request
+            rag_fallback_needed = False
+            if rag_enabled and (not rag_context or not rag_context.retrieved_docs or len(source_doc_ids) == 0):
+                logger.warning(f"RAG enabled but no KB documents retrieved for category={category.value}, building_id={building_id}")
+                logger.warning("Adding human escalation fallback due to missing KB context")
+                rag_fallback_needed = True
+            
             options = []
             for llm_option in llm_response['options']:
                 # Create simple details for UI dropdown (single-step breakdown)
@@ -174,11 +226,32 @@ class AgenticResolutionSimulator:
                     estimated_cost=float(llm_option['estimated_cost']),
                     time_to_resolution=float(llm_option['time_to_resolution']),
                     resident_satisfaction_impact=float(llm_option['resident_satisfaction_impact']),
-                    details=simple_details  # Include simple breakdown for UI
+                    details=simple_details,  # Include simple breakdown for UI
+                    source_doc_ids=source_doc_ids if source_doc_ids else None  # RAG sources
                 )
                 options.append(option)
             
-            logger.info(f"Successfully generated {len(options)} agentic options")
+            # Step 7.2: Add human escalation option if RAG fallback needed
+            if rag_fallback_needed:
+                escalation_option = SimulatedOption(
+                    option_id=f"OPT_ESCALATE_{len(options) + 1}",
+                    action=f"Escalate to Human Administrator - No policy documentation found for this {category.value} issue. A human administrator should review this request to ensure proper handling according to building procedures.",
+                    estimated_cost=0.0,
+                    time_to_resolution=0.5,  # 30 minutes for admin review
+                    resident_satisfaction_impact=0.7,  # High satisfaction (proper handling)
+                    details=[{
+                        'step': 1,
+                        'title': 'Human Review Required',
+                        'description': 'No relevant policy documents found in knowledge base. Route to administrator for manual review and decision.',
+                        'time': '0.5h',
+                        'cost': '$0.00'
+                    }],
+                    source_doc_ids=None  # No KB sources available
+                )
+                options.append(escalation_option)
+                logger.info(f"Added human escalation option due to missing RAG context (total options: {len(options)})")
+            
+            logger.info(f"Successfully generated {len(options)} agentic options with {len(source_doc_ids)} RAG sources (rag_fallback={rag_fallback_needed})")
             return options
         
         except HTTPException:

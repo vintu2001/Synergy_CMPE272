@@ -9,10 +9,12 @@ from app.models.schemas import (
     PolicyWeights, DecisionReasoning, SimulatedOption, PolicyConfiguration,
     CostAnalysis, TimeAnalysis, DecisionRequest, DecisionResponseWithStatus
 )
+from app.rag.retriever import retrieve_decision_rules  # RAG integration
 from datetime import datetime
 import time
 import logging
-from typing import List, Dict, Tuple
+import os
+from typing import List, Dict, Tuple, Optional
 from statistics import mean
 
 logger = logging.getLogger(__name__)
@@ -26,7 +28,8 @@ router = APIRouter()
 
 def create_escalation_decision(
     classification: ClassificationResponse,
-    reason: str = "Resident explicitly requested human contact"
+    reason: str = "Resident explicitly requested human contact",
+    rule_sources: Optional[List[str]] = None
 ) -> DecisionResponse:
     """Creates a decision response for human escalation cases."""
     return DecisionResponse(
@@ -35,7 +38,8 @@ def create_escalation_decision(
         reasoning=reason,
         alternatives_considered=[],
         escalation_reason=reason,
-        policy_scores={"escalation": 1.0}
+        policy_scores={"escalation": 1.0},
+        rule_sources=rule_sources
     )
 
 
@@ -336,9 +340,55 @@ async def make_decision(
     start_time = time.time()
     
     try:
-        # Check for human escalation intent
+        # Step 1: Retrieve decision rules from knowledge base (RAG integration)
+        rag_context = None
+        rule_sources = []
+        
+        # Check if RAG is enabled
+        rag_enabled = os.getenv('RAG_ENABLED', 'false').lower() == 'true'
+        
+        if rag_enabled:
+            try:
+                # Build query for policy rules
+                query_parts = [
+                    f"{request.classification.category.value}",
+                    f"{request.classification.urgency.value} urgency",
+                    "policy rules thresholds requirements"
+                ]
+                rule_query = " ".join(query_parts)
+                
+                # Retrieve policy documents for decision rules
+                rag_context = await retrieve_decision_rules(
+                    query=rule_query,
+                    category=request.classification.category.value,
+                    urgency=request.classification.urgency.value,
+                    building_id=None,  # Will be extracted from options if available
+                    top_k=3  # Fewer documents for decision agent (higher precision)
+                )
+                
+                if rag_context and rag_context.retrieved_docs:
+                    rule_sources = [doc['doc_id'] for doc in rag_context.retrieved_docs if 'doc_id' in doc]
+                    logger.info(f"RAG retrieval successful: {len(rule_sources)} policy rules retrieved")
+                    
+                    # Log retrieved rules for audit trail
+                    for doc in rag_context.retrieved_docs:
+                        logger.debug(f"Retrieved rule: {doc.get('doc_id', 'N/A')} (score: {doc.get('score', 0):.3f})")
+                else:
+                    logger.info("RAG retrieval returned no rules")
+                    
+            except Exception as e:
+                logger.warning(f"RAG retrieval failed: {e}. Continuing with default policy scoring.")
+                rag_context = None
+                rule_sources = []
+        else:
+            logger.info("RAG is disabled (RAG_ENABLED=false)")
+        
+        # Step 2: Check for human escalation intent
         if request.classification.intent == Intent.HUMAN_ESCALATION:
-            response = create_escalation_decision(request.classification)
+            response = create_escalation_decision(
+                request.classification,
+                rule_sources=rule_sources if rule_sources else None
+            )
             return DecisionResponseWithStatus(
                 **response.dict(),
                 processing_time=time.time() - start_time
@@ -421,6 +471,10 @@ async def make_decision(
         if warnings:
             response_parts.append(f"Warning: {' and '.join(warnings)}")
         
+        # Add RAG context if rules were used
+        if rule_sources:
+            response_parts.append(f"Based on {len(rule_sources)} policy rule(s)")
+        
         response_reasoning = ". ".join(response_parts)
         
         return DecisionResponseWithStatus(
@@ -430,6 +484,7 @@ async def make_decision(
             alternatives_considered=reasoning.considerations,
             policy_scores=reasoning.policy_scores,
             escalation_reason=None,
+            rule_sources=rule_sources if rule_sources else None,  # Include RAG sources
             processing_time=time.time() - start_time
         )
         
