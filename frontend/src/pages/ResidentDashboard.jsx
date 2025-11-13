@@ -4,8 +4,7 @@ import { getResidentRequests, resolveRequest } from "../services/api";
 import LoadingSpinner from "../components/LoadingSpinner";
 import StatusBadge from "../components/StatusBadge";
 import Toast from "../components/Toast";
-import { Calendar, CheckCircle2, FileText, Filter, RefreshCw, User, UserCheck, X } from "lucide-react";
-import { RefreshCw, Filter, Search, FileText, Calendar, User, CheckCircle2, X } from "lucide-react";
+import { Calendar, CheckCircle2, FileText, Filter, RefreshCw, User, UserCheck, X, Search } from "lucide-react";
 
 export default function ResidentDashboard() {
   const { residentId, residentName, setResidentId, setResidentName } = useUser();
@@ -131,8 +130,8 @@ export default function ResidentDashboard() {
             </div>
 
             <div className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-600 shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
-              Showing <span className="font-semibold text-slate-700 dark:text-slate-100">{filteredItems.length}</span>
-              {filteredItems.length === 1 ? "request" : "requests"}
+              Showing <span className="font-semibold text-slate-700 dark:text-slate-100">{filtered.length}</span>
+              {filtered.length === 1 ? "request" : "requests"}
               {statusFilter !== "All" && (
                 <span className="rounded-full bg-slate-200 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                   {statusFilter}
@@ -149,7 +148,7 @@ export default function ResidentDashboard() {
             <div className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700 shadow-sm dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200">
               {error}
             </div>
-          ) : filteredItems.length === 0 ? (
+          ) : filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white p-12 text-center shadow-sm dark:border-slate-800 dark:bg-slate-900">
               <FileText className="h-10 w-10 text-slate-400" />
               <p className="text-base font-semibold text-slate-700 dark:text-slate-200">No requests found</p>
@@ -175,7 +174,7 @@ export default function ResidentDashboard() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                    {filteredItems.map((item) => (
+                    {filtered.map((item) => (
                       <tr key={item.request_id} className="hover:bg-slate-50 dark:hover:bg-slate-800/60">
                         <td className="whitespace-nowrap px-6 py-4 font-mono text-xs text-slate-600 dark:text-slate-300">
                           {item.request_id}
@@ -233,166 +232,6 @@ export default function ResidentDashboard() {
         </div>
       </section>
 
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-
-      {resolveModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-8 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-700 dark:bg-slate-900">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Confirm resolution</h3>
-              <button
-                onClick={() => {
-                  setResolveModal(null);
-                  setResolutionNotes("");
-                }}
-                className="rounded-full p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
-              {resolveModal.requestText}
-            </div>
-
-            <label className="mb-3 block text-sm font-semibold text-slate-700 dark:text-slate-200">
-              Resolution notes (optional)
-            </label>
-            <textarea
-              rows={4}
-              className="mb-4 w-full rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-900 focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-400 dark:focus:ring-slate-800"
-              placeholder="How did you fix the issue?"
-              value={resolutionNotes}
-              onChange={(e) => setResolutionNotes(e.target.value)}
-            />
-
-            <div className="flex gap-3">
-              <button
-                onClick={() => {
-                  setResolveModal(null);
-                  setResolutionNotes("");
-                }}
-                className="flex-1 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-200 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800 dark:focus:ring-slate-700"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleResolve}
-                disabled={resolving}
-                className="flex-1 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200 disabled:opacity-60 dark:bg-emerald-400 dark:text-emerald-950 dark:hover:bg-emerald-300"
-              >
-                {resolving ? "Processing..." : "Mark resolved"}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="flex items-center justify-center rounded-2xl bg-white p-12 shadow-xl">
-            <LoadingSpinner label="Loading requests..." />
-          </div>
-        ) : error ? (
-          <div className="rounded-2xl bg-red-50 border-2 border-red-200 p-6 shadow-xl">
-            <p className="text-sm font-medium text-red-800">{error}</p>
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-2xl bg-white p-12 shadow-xl">
-            <FileText className="mb-4 h-16 w-16 text-gray-400" />
-            <p className="text-lg font-semibold text-gray-600">No requests found</p>
-            <p className="mt-2 text-sm text-gray-500">
-              {statusFilter === "All" ? "Submit your first request to get started!" : `No requests with status "${statusFilter}"`}
-            </p>
-          </div>
-        ) : (
-          <div className="overflow-hidden rounded-2xl bg-white shadow-xl">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
-                  <tr>
-                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
-                      Request ID
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
-                      Message
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
-                      Category
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
-                      Urgency
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
-                      Status
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
-                      Created
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 bg-white">
-                  {filtered.map((r) => (
-                    <tr key={r.request_id} className="transition-colors hover:bg-blue-50">
-                      <td className="whitespace-nowrap px-6 py-4">
-                        <code className="rounded bg-gray-100 px-2 py-1 text-xs font-mono text-gray-800">
-                          {r.request_id}
-                        </code>
-                      </td>
-                      <td className="px-6 py-4">
-                        <p className="max-w-md truncate text-sm text-gray-900" title={r.message_text}>
-                          {r.message_text}
-                        </p>
-                      </td>
-                      <td className="whitespace-nowrap px-6 py-4">
-                        <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-800">
-                          {r.category}
-                        </span>
-                      </td>
-                      <td className="whitespace-nowrap px-6 py-4">
-                        <span
-                          className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                            r.urgency === "High"
-                              ? "bg-red-100 text-red-800"
-                              : r.urgency === "Medium"
-                              ? "bg-yellow-100 text-yellow-800"
-                              : "bg-blue-100 text-blue-800"
-                          }`}
-                        >
-                          {r.urgency}
-                        </span>
-                      </td>
-                      <td className="whitespace-nowrap px-6 py-4">
-                        <StatusBadge status={r.status} />
-                      </td>
-                      <td className="whitespace-nowrap px-6 py-4">
-                        <div className="flex items-center gap-2 text-sm text-gray-600">
-                          <Calendar className="h-4 w-4" />
-                          {new Date(r.created_at).toLocaleDateString()}
-                        </div>
-                      </td>
-                      <td className="whitespace-nowrap px-6 py-4">
-                        {(r.status === "In Progress" || r.status === "IN_PROGRESS") && (
-                          <button
-                            onClick={() => setResolveModal({ requestId: r.request_id, requestText: r.message_text })}
-                            className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 px-4 py-2 text-sm font-semibold text-white shadow-md transition-all hover:from-green-600 hover:to-emerald-600 hover:shadow-lg"
-                          >
-                            <CheckCircle2 className="h-4 w-4" />
-                            Mark as Resolved
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </div>
-      
-      {/* Toast Notifications */}
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       
       {/* Resolve Modal */}

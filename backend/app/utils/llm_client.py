@@ -164,12 +164,16 @@ class LLMClient:
             if not isinstance(options, list):
                 raise ValueError(f"Options must be a list, got {type(options)}")
             
-            if len(options) < 3:
-                raise ValueError(f"Insufficient options generated: {len(options)} (expected 3)")
+            if len(options) < 2:
+                raise ValueError(f"Insufficient options generated: {len(options)} (expected at least 2)")
             
             # Validate each option
             for idx, option in enumerate(options):
-                required_fields = ['option_id', 'action', 'estimated_cost', 'time_to_resolution', 'resident_satisfaction_impact']
+                required_fields = ['option_id', 'action', 'estimated_cost']
+                # Check for either new field names or old field names for backward compatibility
+                if 'estimated_time' not in option and 'time_to_resolution' not in option:
+                    raise ValueError(f"Option {idx+1} missing time field (estimated_time or time_to_resolution)")
+                
                 for field in required_fields:
                     if field not in option:
                         raise ValueError(f"Option {idx+1} missing required field: {field}")

@@ -112,15 +112,15 @@ async def submit_request(request: MessageRequest):
                 resident_history=resident_history_dicts if resident_history_dicts else None
             )
             
-            # Convert to dict for storage (including details for UI dropdown)
+            # Convert to dict for storage
             simulated_options = [
                 {
                     "option_id": opt.option_id,
                     "action": opt.action,
                     "estimated_cost": opt.estimated_cost,
-                    "time_to_resolution": opt.time_to_resolution,
-                    "resident_satisfaction_impact": opt.resident_satisfaction_impact,
-                    "details": opt.details  # Include detailed breakdown for UI
+                    "estimated_time": opt.estimated_time,
+                    "reasoning": opt.reasoning,
+                    "source_doc_ids": opt.source_doc_ids
                 }
                 for opt in simulation_options
             ]
@@ -300,8 +300,8 @@ async def select_option(selection: SelectOptionRequest):
                     "option_id": "escalate_to_human",
                     "action": "Escalate to Human Support",
                     "estimated_cost": 0,
-                    "time_to_resolution": 24.0,
-                    "resident_satisfaction_impact": 0.95
+                    "estimated_time": 24.0,
+                    "reasoning": "Manual escalation requested by resident"
                 }
             }
         
@@ -336,7 +336,7 @@ async def select_option(selection: SelectOptionRequest):
             "status": "executed",
             "action_taken": selected_option['action'],
             "estimated_cost": selected_option['estimated_cost'],
-            "estimated_time": selected_option['time_to_resolution'],
+            "estimated_time": selected_option.get('estimated_time', selected_option.get('time_to_resolution', 1.0)),
             "message": f"Executing: {selected_option['action']}"
         }
         
@@ -365,7 +365,7 @@ async def select_option(selection: SelectOptionRequest):
             
             # Log decision
             estimated_cost = selected_option['estimated_cost']
-            estimated_time = selected_option['time_to_resolution']
+            estimated_time = selected_option.get('estimated_time', selected_option.get('time_to_resolution', 1.0))
             config = PolicyConfiguration()
             
             await log_decision(

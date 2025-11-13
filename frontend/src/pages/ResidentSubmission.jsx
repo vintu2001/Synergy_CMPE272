@@ -4,7 +4,7 @@ import { classifyMessage, submitRequest, selectOption } from "../services/api";
 import { useUser } from "../context/UserContext";
 import LoadingSpinner from "../components/LoadingSpinner";
 import Toast from "../components/Toast";
-import { Sparkles, Send, AlertCircle, CheckCircle2, Clock, Zap, DollarSign, Heart, Star, UserX, ChevronDown, ChevronUp, Info } from "lucide-react";
+import { Sparkles, Send, AlertCircle, CheckCircle2, Clock, Zap, DollarSign, Heart, Star, User, UserX, ChevronDown, ChevronUp, Info, Layers, Settings2, ShieldCheck, SlidersHorizontal } from "lucide-react";
 
 const categoryStyles = {
   Maintenance: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-200",
@@ -43,8 +43,6 @@ export default function ResidentSubmission() {
   const debounceRef = useRef(null);
   
   // NEW: State for option selection flow
-  const [submittedResult, setSubmittedResult] = useState(null); // Stores result after submit
-  const [selectingOption, setSelectingOption] = useState(false); // Loading state for option selection
   const [expandedOptionId, setExpandedOptionId] = useState(null); // Track which option's details are expanded
 
   const charCount = useMemo(() => messageText.length || 0, [messageText]);
@@ -152,24 +150,6 @@ export default function ResidentSubmission() {
         message: "Failed to select option. Please try again.", 
         type: "error" 
       });
-    } finally {
-      setSelectingOption(false);
-    }
-  };
-
-  const handleSelectOption = async (optionId) => {
-    if (!submittedResult) return;
-    setSelectingOption(true);
-    try {
-      await selectOption(submittedResult.request_id, optionId);
-      setToast({ message: "Great! We'll take it from here.", type: "success" });
-      setTimeout(() => {
-        reset();
-        setAnalysis(null);
-        setSubmittedResult(null);
-      }, 1500);
-    } catch (e) {
-      setToast({ message: "We couldn't apply that option. Please try again.", type: "error" });
     } finally {
       setSelectingOption(false);
     }
@@ -417,216 +397,7 @@ export default function ResidentSubmission() {
             </div>
           )}
         </div>
-        
-        {/* NEW: Option Selection Panel */}
-        {submittedResult && submittedResult.simulation?.options && (
-          <div className="mt-8">
-            <div className="rounded-2xl bg-gradient-to-br from-green-50 to-blue-50 p-8 shadow-2xl">
-              <div className="mb-6 text-center">
-                <CheckCircle2 className="mx-auto mb-3 h-12 w-12 text-green-600" />
-                <h2 className="mb-2 text-2xl font-bold text-gray-900">Request Classified Successfully!</h2>
-                <p className="text-gray-600">
-                  Please choose how you'd like us to resolve your issue:
-                </p>
-                <div className="mt-4 inline-flex items-center gap-3 text-sm">
-                  <span className="font-semibold text-gray-700">
-                    Category: {submittedResult.classification.category}
-                  </span>
-                  <span className="text-gray-400">•</span>
-                  <span className="font-semibold text-gray-700">
-                    Urgency: {submittedResult.classification.urgency}
-                  </span>
-                  {submittedResult.risk_assessment && (
-                    <>
-                      <span className="text-gray-400">•</span>
-                      <span className="font-semibold text-gray-700">
-                        Risk: {submittedResult.risk_assessment.risk_level}
-                      </span>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid gap-6 md:grid-cols-4">
-                {submittedResult.simulation.options.map((option) => {
-                  const isRecommended = option.option_id === submittedResult.simulation.recommended_option_id;
-                  return (
-                    <div
-                      key={option.option_id}
-                      className={`relative rounded-xl bg-white p-6 shadow-lg transition-all hover:shadow-2xl ${
-                        isRecommended ? "ring-4 ring-yellow-400" : ""
-                      }`}
-                    >
-                      {isRecommended && (
-                        <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                          <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-yellow-400 to-orange-400 px-3 py-1 text-xs font-bold text-white shadow-lg">
-                            <Star className="h-3 w-3 fill-current" />
-                            RECOMMENDED
-                          </span>
-                        </div>
-                      )}
-
-                      <h3 className="mb-4 text-lg font-bold text-gray-900">{option.action}</h3>
-
-                      <div className="mb-6 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="flex items-center gap-2 text-sm text-gray-600">
-                            <DollarSign className="h-4 w-4 text-green-600" />
-                            Cost
-                          </span>
-                          <span className="font-semibold text-gray-900">
-                            ${parseFloat(option.estimated_cost || 0).toFixed(2)}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center justify-between">
-                          <span className="flex items-center gap-2 text-sm text-gray-600">
-                            <Clock className="h-4 w-4 text-blue-600" />
-                            Time
-                          </span>
-                          <span className="font-semibold text-gray-900">
-                            {parseFloat(option.time_to_resolution || 0).toFixed(1)}h
-                          </span>
-                        </div>
-
-                        <div className="flex items-center justify-between">
-                          <span className="flex items-center gap-2 text-sm text-gray-600">
-                            <Heart className="h-4 w-4 text-red-500" />
-                            Satisfaction
-                          </span>
-                          <span className="font-semibold text-gray-900">
-                            {(parseFloat(option.resident_satisfaction_impact || 0) * 100).toFixed(0)}%
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Details Dropdown */}
-                      {option.details && option.details.length > 0 && (
-                        <div className="mb-4">
-                          <button
-                            onClick={() => setExpandedOptionId(expandedOptionId === option.option_id ? null : option.option_id)}
-                            className="flex w-full items-center justify-between rounded-lg border-2 border-gray-200 bg-gray-50 px-4 py-2 text-sm font-medium text-gray-700 transition-all hover:bg-gray-100 hover:border-gray-300"
-                          >
-                            <span className="flex items-center gap-2">
-                              <Info className="h-4 w-4" />
-                              View Details
-                            </span>
-                            {expandedOptionId === option.option_id ? (
-                              <ChevronUp className="h-4 w-4" />
-                            ) : (
-                              <ChevronDown className="h-4 w-4" />
-                            )}
-                          </button>
-                          
-                          {expandedOptionId === option.option_id && (
-                            <div className="mt-3 space-y-3 rounded-lg border-2 border-blue-100 bg-blue-50 p-4">
-                              {option.details.map((detail, idx) => (
-                                <div key={idx} className="border-l-4 border-blue-500 pl-3">
-                                  <div className="mb-1 flex items-start justify-between">
-                                    <span className="font-semibold text-gray-900">{detail.title}</span>
-                                    {detail.status && (
-                                      <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${
-                                        detail.status === 'immediate' 
-                                          ? 'bg-red-100 text-red-700' 
-                                          : 'bg-blue-100 text-blue-700'
-                                      }`}>
-                                        {detail.status}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <p className="text-sm text-gray-700">{detail.description}</p>
-                                  <div className="mt-2 flex gap-4 text-xs text-gray-600">
-                                    {detail.time && (
-                                      <span className="flex items-center gap-1">
-                                        <Clock className="h-3 w-3" />
-                                        {detail.time}
-                                      </span>
-                                    )}
-                                    {detail.cost && (
-                                      <span className="flex items-center gap-1">
-                                        <DollarSign className="h-3 w-3" />
-                                        {detail.cost}
-                                      </span>
-                                    )}
-                                    {detail.risk && (
-                                      <span className={`rounded-full px-2 py-0.5 font-semibold ${
-                                        detail.risk === 'high' 
-                                          ? 'bg-red-100 text-red-700' 
-                                          : detail.risk === 'medium'
-                                          ? 'bg-yellow-100 text-yellow-700'
-                                          : 'bg-green-100 text-green-700'
-                                      }`}>
-                                        {detail.risk} risk
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      <button
-                        onClick={() => handleSelectOption(option.option_id)}
-                        disabled={selectingOption}
-                        className={`w-full rounded-lg px-4 py-3 font-semibold text-white shadow-md transition-all hover:shadow-lg disabled:opacity-50 ${
-                          isRecommended
-                            ? "bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600"
-                            : "bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600"
-                        }`}
-                      >
-                        {selectingOption ? "Processing..." : "Select This Option"}
-                      </button>
-                    </div>
-                  );
-                })}
-                
-                {/* Escalate to Human Option */}
-                <div className="relative rounded-xl border-2 border-red-300 bg-gradient-to-br from-red-50 to-orange-50 p-6 shadow-lg transition-all hover:shadow-2xl">
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-red-500 to-orange-500 px-3 py-1 text-xs font-bold text-white shadow-lg">
-                      <UserX className="h-3 w-3" />
-                      ESCALATE
-                    </span>
-                  </div>
-
-                  <h3 className="mb-4 text-lg font-bold text-gray-900">Talk to a Human</h3>
-                  
-                  <div className="mb-6">
-                    <p className="text-sm text-gray-600">
-                      Not satisfied with the automated options? We'll connect you with a staff member who can provide personalized assistance.
-                    </p>
-                  </div>
-
-                  <div className="mb-4 space-y-2 rounded-lg bg-white p-3">
-                    <div className="flex items-center gap-2 text-xs text-gray-600">
-                      <AlertCircle className="h-3 w-3" />
-                      <span>Direct human support</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-gray-600">
-                      <Clock className="h-3 w-3" />
-                      <span>Response within 24 hours</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-gray-600">
-                      <CheckCircle2 className="h-3 w-3" />
-                      <span>Personalized resolution</span>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={() => handleSelectOption("escalate_to_human")}
-                    disabled={selectingOption}
-                    className="w-full rounded-lg bg-gradient-to-r from-red-500 to-orange-500 px-4 py-3 font-semibold text-white shadow-md transition-all hover:from-red-600 hover:to-orange-600 hover:shadow-lg disabled:opacity-50"
-                  >
-                    {selectingOption ? "Processing..." : "Escalate to Human"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+      </section>
     </div>
   );
 }

@@ -14,6 +14,9 @@ from typing import List, Dict, Any, Optional
 import logging
 import os
 
+import simpy
+import random
+
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
@@ -121,9 +124,9 @@ class AgenticResolutionSimulator:
                             option_id=phased_opt['option_id'],
                             action=phased_opt['action'],
                             estimated_cost=float(phased_opt['estimated_cost']),
-                            time_to_resolution=float(phased_opt['time_to_resolution']),
-                            resident_satisfaction_impact=float(phased_opt['resident_satisfaction_impact']),
-                            details=phased_opt.get('details')  # Include detailed breakdown for UI
+                            estimated_time=float(phased_opt.get('time_to_resolution', phased_opt.get('estimated_time', 1.0))),
+                            reasoning=phased_opt.get('reasoning', 'Multi-step phased resolution approach'),
+                            source_doc_ids=None  # Phased options from reasoning, not RAG
                         )
                         options.append(option)
                     
@@ -224,9 +227,8 @@ class AgenticResolutionSimulator:
                     option_id=llm_option['option_id'],
                     action=llm_option['action'],
                     estimated_cost=float(llm_option['estimated_cost']),
-                    time_to_resolution=float(llm_option['time_to_resolution']),
-                    resident_satisfaction_impact=float(llm_option['resident_satisfaction_impact']),
-                    details=simple_details,  # Include simple breakdown for UI
+                    estimated_time=float(llm_option.get('time_to_resolution', llm_option.get('estimated_time', 1.0))),
+                    reasoning=llm_option.get('reasoning', llm_option.get('action', 'Automated resolution option')),
                     source_doc_ids=source_doc_ids if source_doc_ids else None  # RAG sources
                 )
                 options.append(option)
@@ -237,15 +239,8 @@ class AgenticResolutionSimulator:
                     option_id=f"OPT_ESCALATE_{len(options) + 1}",
                     action=f"Escalate to Human Administrator - No policy documentation found for this {category.value} issue. A human administrator should review this request to ensure proper handling according to building procedures.",
                     estimated_cost=0.0,
-                    time_to_resolution=0.5,  # 30 minutes for admin review
-                    resident_satisfaction_impact=0.7,  # High satisfaction (proper handling)
-                    details=[{
-                        'step': 1,
-                        'title': 'Human Review Required',
-                        'description': 'No relevant policy documents found in knowledge base. Route to administrator for manual review and decision.',
-                        'time': '0.5h',
-                        'cost': '$0.00'
-                    }],
+                    estimated_time=0.5,  # 30 minutes for admin review
+                    reasoning="No relevant policy documents found in knowledge base. Human review required for proper handling.",
                     source_doc_ids=None  # No KB sources available
                 )
                 options.append(escalation_option)

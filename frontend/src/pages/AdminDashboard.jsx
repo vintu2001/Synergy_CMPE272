@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { getAllRequests, resolveRequest } from "../services/api";
 import LoadingSpinner from "../components/LoadingSpinner";
 import StatusBadge from "../components/StatusBadge";
-import { Shield, Search, Filter, RefreshCw, Eye, EyeOff, Key, ChevronDown, ChevronRight, DollarSign, Clock, Heart } from "lucide-react";
+import { Shield, Search, Filter, RefreshCw, Eye, EyeOff, Key, ChevronDown, ChevronRight, DollarSign, Clock, Heart, AlertTriangle, UserX } from "lucide-react";
 
 export default function AdminDashboard() {
   const [apiKey, setApiKey] = useState(localStorage.getItem("admin_api_key") || "");
@@ -17,6 +17,13 @@ export default function AdminDashboard() {
   const [sortField, setSortField] = useState("created_at");
   const [sortDir, setSortDir] = useState("desc");
   const [expandedRow, setExpandedRow] = useState(null);
+  const [urgentOnly, setUrgentOnly] = useState(false);
+  const [requireHumanOnly, setRequireHumanOnly] = useState(false);
+  const [escalatedOnly, setEscalatedOnly] = useState(false);
+  const [resolveModal, setResolveModal] = useState(null);
+  const [resolving, setResolving] = useState(false);
+  const [resolutionNotes, setResolutionNotes] = useState("");
+  const [toast, setToast] = useState(null);
 
   async function load() {
     if (!apiKey) return;
@@ -334,8 +341,8 @@ export default function AdminDashboard() {
                 </thead>
                 <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                   {sorted.map((r) => (
-                    <>
-                      <tr key={r.request_id} className="hover:bg-slate-50 dark:hover:bg-slate-800/60">
+                    <React.Fragment key={r.request_id}>
+                      <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/60">
                         <td className="whitespace-nowrap px-6 py-4 text-xs text-slate-600 dark:text-slate-300">
                           <code className="rounded bg-slate-100 px-2 py-1 font-mono text-slate-700 dark:bg-slate-800 dark:text-slate-200">
                             {r.request_id}
@@ -489,7 +496,7 @@ export default function AdminDashboard() {
                                               Cost
                                             </span>
                                             <span className="font-semibold text-green-600">
-                                              ${opt.estimated_cost.toFixed(2)}
+                                              ${Number(opt.estimated_cost).toFixed(2)}
                                             </span>
                                           </div>
                                           <div className="flex items-center justify-between text-xs">
@@ -498,18 +505,20 @@ export default function AdminDashboard() {
                                               Time
                                             </span>
                                             <span className="font-semibold text-blue-600">
-                                              {opt.time_to_resolution.toFixed(1)}h
+                                              {Number(opt.estimated_time).toFixed(1)}h
                                             </span>
                                           </div>
-                                          <div className="flex items-center justify-between text-xs">
-                                            <span className="flex items-center gap-1 text-gray-600">
-                                              <Heart className="h-3 w-3" />
-                                              Satisfaction
-                                            </span>
-                                            <span className="font-semibold text-red-600">
-                                              {(opt.resident_satisfaction_impact * 100).toFixed(0)}%
-                                            </span>
-                                          </div>
+                                          {opt.resident_satisfaction_impact != null && (
+                                            <div className="flex items-center justify-between text-xs">
+                                              <span className="flex items-center gap-1 text-gray-600">
+                                                <Heart className="h-3 w-3" />
+                                                Satisfaction
+                                              </span>
+                                              <span className="font-semibold text-red-600">
+                                                {(Number(opt.resident_satisfaction_impact) * 100).toFixed(0)}%
+                                              </span>
+                                            </div>
+                                          )}
                                         </div>
                                       </div>
                                     ))}
@@ -520,7 +529,7 @@ export default function AdminDashboard() {
                           </td>
                         </tr>
                       )}
-                    </>
+                    </React.Fragment>
                   ))}
                 </tbody>
               </table>
