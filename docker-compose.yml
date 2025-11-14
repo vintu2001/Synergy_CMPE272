@@ -1,0 +1,97 @@
+version: '3.8'
+
+services:
+  # API Gateway
+  gateway:
+    build:
+      context: ./services/gateway
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - MESSAGE_INTAKE_URL=http://message-intake:8003
+      - DECISION_ENGINE_URL=http://decision-engine:8002
+      - GOVERNANCE_URL=http://governance:8001
+    depends_on:
+      - message-intake
+      - decision-engine
+      - governance
+    networks:
+      - synergy-network
+
+  # Governance Service
+  governance:
+    build:
+      context: ./services/governance
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      - ADMIN_API_KEY=${ADMIN_API_KEY:-admin_secret_key_12345}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_DYNAMODB_GOVERNANCE_TABLE=${AWS_DYNAMODB_GOVERNANCE_TABLE:-aam_governance_logs}
+    networks:
+      - synergy-network
+    volumes:
+      - ./libs:/app/libs:ro
+
+  # Decision Engine Service
+  decision-engine:
+    build:
+      context: ./services/decision-engine
+      dockerfile: Dockerfile
+    ports:
+      - "8002:8002"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    networks:
+      - synergy-network
+    volumes:
+      - ./libs:/app/libs:ro
+      - ./ml/models:/app/app/ml_models:ro
+
+  # Message Intake Service
+  message-intake:
+    build:
+      context: ./services/message-intake
+      dockerfile: Dockerfile
+    ports:
+      - "8003:8003"
+    environment:
+      - DECISION_ENGINE_URL=http://decision-engine:8002
+      - GOVERNANCE_URL=http://governance:8001
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_DYNAMODB_TABLE=${AWS_DYNAMODB_TABLE:-aam_resident_requests}
+      - AWS_SQS_QUEUE_URL=${AWS_SQS_QUEUE_URL}
+    depends_on:
+      - decision-engine
+      - governance
+    networks:
+      - synergy-network
+    volumes:
+      - ./libs:/app/libs:ro
+
+  # PostgreSQL Database (optional - for local dev without AWS)
+  # postgres:
+  #   image: postgres:15
+  #   environment:
+  #     - POSTGRES_USER=synergy
+  #     - POSTGRES_PASSWORD=synergy
+  #     - POSTGRES_DB=synergy
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   networks:
+  #     - synergy-network
+
+networks:
+  synergy-network:
+    driver: bridge
+
+# volumes:
+#   postgres_data:
