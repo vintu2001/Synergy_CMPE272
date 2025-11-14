@@ -21,18 +21,22 @@ from app.models.schemas import (
     GovernanceStatsResponse, DecisionResponse, ClassificationResponse,
     IssueCategory, Urgency, Intent
 )
-import os
 import logging
 import json
 
+from app.config import get_settings
+
 logger = logging.getLogger(__name__)
+
+# Get configuration from centralized settings
+settings = get_settings()
 
 dynamodb = boto3.resource(
     'dynamodb',
-    region_name=os.getenv('AWS_REGION', 'us-east-1')
+    region_name=settings.AWS_REGION
 )
 
-GOVERNANCE_TABLE_NAME = os.getenv('AWS_DYNAMODB_GOVERNANCE_TABLE', 'aam_governance_logs')
+GOVERNANCE_TABLE_NAME = settings.AWS_DYNAMODB_GOVERNANCE_TABLE
 
 
 def get_governance_table():

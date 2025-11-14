@@ -6,7 +6,9 @@ from typing import Dict, List, Optional, Any
 from enum import Enum
 from app.models.schemas import IssueCategory, Urgency
 from app.utils.llm_client import llm_client
-import google.generativeai as genai
+from app.utils.langchain_llm_factory import create_gemini_llm_with_schema
+from app.models.structured_schemas import ComplexityAnalysisSchema, ReasoningChainSchema
+from app.utils.parse_utils import parse_with_reprompt
 import logging
 import json
 
@@ -39,55 +41,93 @@ class MultiStepReasoner:
         tools_data: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        Analyze if an issue requires multi-step reasoning.
+        Analyze issue complexity using structured output.
+        Uses ComplexityAnalysisSchema for type-safe responses.
         
         Returns:
-            Dict with 'is_complex', 'complexity_score', 'reasoning_required'
+            Dict with complexity analysis or fallback to simple
         """
         if not self.llm_client.enabled:
-            return {'is_complex': False, 'complexity_score': 0.0}
+            return {
+                'complexity_level': 'simple',
+                'reasoning_required': False,
+                'factors': ['LLM disabled'],
+                'confidence': 0.0
+            }
         
         try:
+            # Create LLM with structured output
+            structured_llm = create_gemini_llm_with_schema(
+                schema=ComplexityAnalysisSchema,
+                temperature=0.0,
+                model="gemini-2.5-flash"
+            )
+            
             prompt = f"""Analyze this apartment issue for complexity.
 
 Issue: "{message_text}"
 Category: {category}, Urgency: {urgency}
 
-Mark as COMPLEX (score > 0.7) ONLY if:
+Mark as COMPLEX if:
 - Multiple systems affected (e.g., "water AND electrical")
 - Safety hazard (e.g., "sparking", "gas leak", "flooding")
 - Structural damage (e.g., "ceiling collapse", "foundation")
 - Affects multiple units
 - Recurring issue (happened 3+ times)
 
-Mark as SIMPLE (score < 0.5) if:
+Mark as SIMPLE if:
 - Single component fix (e.g., "dripping faucet", "broken lock")
 - Standard maintenance
 - Clear root cause
 
-Return JSON:
-{{
-  "is_complex": true/false,
-  "complexity_score": 0.0-1.0,
-  "reasoning_required": "single_step"|"multi_step"|"escalation",
-  "complexity_factors": ["brief"],
-  "recommended_steps": 3
-}}
+Return JSON matching ComplexityAnalysisSchema:
+- complexity_level: "simple", "moderate", or "complex"
+- reasoning_required: true if multi-step needed, false otherwise
+- factors: array of factors contributing to complexity
+- confidence: 0.0-1.0
 
 Be conservative - most issues are simple."""
             
-            response = self.llm_client.model.generate_content(
-                prompt,
-                generation_config=genai.GenerationConfig(response_mime_type='application/json')
+            # Use structured output with reprompt
+            from app.utils.llm_client import log_error_to_cloudwatch
+            result = await parse_with_reprompt(
+                llm=structured_llm,
+                initial_prompt=prompt,
+                schema=ComplexityAnalysisSchema,
+                context={
+                    'category': category,
+                    'urgency': urgency
+                },
+                log_error_fn=log_error_to_cloudwatch,
+                max_attempts=2
             )
             
-            result = json.loads(response.text)
-            logger.info(f"Complexity analysis: {result.get('reasoning_required')} (score: {result.get('complexity_score')})")
-            return result
+            if result['success']:
+                data = result['data']
+                logger.info(
+                    f"Complexity analysis: {data['complexity_level']} "
+                    f"(reasoning_required={data['reasoning_required']}, "
+                    f"confidence={data['confidence']:.2f})"
+                )
+                return data
+            else:
+                # Fallback to simple on parse failure
+                logger.error(f"Complexity analysis failed: {result['error']['message']}")
+                return {
+                    'complexity_level': 'simple',
+                    'reasoning_required': False,
+                    'factors': ['Parse failure - defaulting to simple'],
+                    'confidence': 0.0
+                }
         
         except Exception as e:
             logger.error(f"Complexity analysis failed: {e}")
-            return {'is_complex': False, 'complexity_score': 0.0, 'reasoning_required': 'single_step'}
+            return {
+                'complexity_level': 'simple',
+                'reasoning_required': False,
+                'factors': [f'Error: {str(e)}'],
+                'confidence': 0.0
+            }
     
     async def generate_reasoning_chain(
         self,
@@ -99,50 +139,67 @@ Be conservative - most issues are simple."""
         complexity_analysis: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        Generate a multi-step reasoning chain for complex issues.
-        Implements ReAct pattern: Reason → Act → Observe cycle.
+        Generate multi-step reasoning chain using structured output.
+        Uses ReasoningChainSchema for type-safe responses.
         
         Returns:
-            Dict with 'steps', 'final_recommendation', 'reasoning_trace'
+            Dict with 'steps', 'final_recommendation', 'confidence' or error
         """
-        if not complexity_analysis.get('is_complex'):
+        if not complexity_analysis.get('reasoning_required'):
             return {'steps': [], 'reasoning_type': 'single_step'}
         
         try:
-            # Simplified prompt to avoid token limits
-            prompt = f"""Create a multi-step plan for this complex issue:
+            # Create LLM with structured output
+            structured_llm = create_gemini_llm_with_schema(
+                schema=ReasoningChainSchema,
+                temperature=0.0,
+                model="gemini-2.5-flash"
+            )
+            
+            prompt = f"""Create a multi-step reasoning plan for this complex issue:
 
 "{message_text}"
 Category: {category}, Urgency: {urgency}, Risk: {risk_score}
 
-Generate 3 sequential steps. For each:
-- step_number (1-3)
-- type ("diagnose"|"coordinate"|"execute"|"verify")
-- action (brief description)
-- estimated_time_hours (number)
-- estimated_cost (number)
-- risk_level ("low"|"medium"|"high")
+Generate 2-4 sequential reasoning steps. For each step, provide:
+- step: Brief description of what to analyze or do
+- rationale: Why this step is necessary
 
-Return JSON with:
-- steps: array of 3 steps
-- total_estimated_time: sum of times
-- total_estimated_cost: sum of costs
-- success_probability: 0-1
+Then provide:
+- final_recommendation: Overall recommendation based on the reasoning
+- confidence: 0.0-1.0 confidence in the reasoning chain
 
-Keep it concise."""
+Return JSON matching ReasoningChainSchema.
+
+Keep descriptions concise but actionable."""
             
-            response = self.llm_client.model.generate_content(
-                prompt,
-                generation_config=genai.GenerationConfig(response_mime_type='application/json')
+            # Use structured output with reprompt
+            from app.utils.llm_client import log_error_to_cloudwatch
+            result = await parse_with_reprompt(
+                llm=structured_llm,
+                initial_prompt=prompt,
+                schema=ReasoningChainSchema,
+                context={
+                    'category': category,
+                    'urgency': urgency,
+                    'risk_score': risk_score
+                },
+                log_error_fn=log_error_to_cloudwatch,
+                max_attempts=2
             )
             
-            result = json.loads(response.text)
-            logger.info(f"Generated {len(result.get('steps', []))} reasoning steps")
-            return result
+            if result['success']:
+                data = result['data']
+                logger.info(f"Generated {len(data['steps'])} reasoning steps (confidence={data['confidence']:.2f})")
+                return data
+            else:
+                # Fallback to empty on parse failure
+                logger.error(f"Reasoning chain generation failed: {result['error']['message']}")
+                return {'steps': [], 'final_recommendation': 'Unable to generate reasoning chain', 'confidence': 0.0}
         
         except Exception as e:
             logger.error(f"Reasoning chain generation failed: {e}")
-            return {'steps': [], 'error': str(e)}
+            return {'steps': [], 'final_recommendation': f'Error: {str(e)}', 'confidence': 0.0}
     
     async def create_phased_options(
         self,

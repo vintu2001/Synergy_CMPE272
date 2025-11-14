@@ -1,9 +1,7 @@
 """
 LLM Client for Agentic Option Generation
-Uses Google Gemini for dynamic, context-aware decision making.
+Uses LangChain with Google Gemini for dynamic, context-aware decision making.
 """
-import google.generativeai as genai
-import os
 import json
 import logging
 from typing import Dict, List, Optional, Any
@@ -11,17 +9,29 @@ from datetime import datetime, timezone
 import boto3
 from botocore.exceptions import ClientError
 
+from app.config import get_settings
+from app.utils.langchain_llm_factory import (
+    create_gemini_llm,
+    create_gemini_llm_for_json,
+    create_gemini_llm_with_schema
+)
+from app.utils.langchain_errors import (
+    LLMTimeoutError,
+    LLMSafetyError,
+    LLMAPIError,
+    LLMConfigurationError,
+    create_error_response
+)
+from app.utils.parse_utils import parse_with_reprompt
+from app.models.structured_schemas import SimulationOutputSchema
+
 logger = logging.getLogger(__name__)
 
-# Configure Gemini
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-if not GEMINI_API_KEY:
-    logger.warning("GEMINI_API_KEY not set. LLM features will be disabled.")
-else:
-    genai.configure(api_key=GEMINI_API_KEY)
+# Configure settings
+settings = get_settings()
 
 # CloudWatch client for error logging
-cloudwatch_logs = boto3.client('logs', region_name=os.getenv('AWS_REGION', 'us-east-1'))
+cloudwatch_logs = boto3.client('logs', region_name=settings.AWS_REGION)
 LOG_GROUP_NAME = '/aam/llm-errors'
 LOG_STREAM_NAME = f'llm-errors-{datetime.now(timezone.utc).strftime("%Y-%m-%d")}'
 
@@ -45,7 +55,7 @@ def ensure_cloudwatch_log_stream():
         logger.warning(f"Could not create CloudWatch log stream: {e}")
 
 
-def log_error_to_cloudwatch(error_type: str, error_message: str, context: Dict[str, Any]):
+async def log_error_to_cloudwatch(error_type: str, error_message: str, context: Dict[str, Any]):
     """Log LLM errors to CloudWatch for monitoring."""
     try:
         ensure_cloudwatch_log_stream()
@@ -71,13 +81,19 @@ def log_error_to_cloudwatch(error_type: str, error_message: str, context: Dict[s
 
 
 class LLMClient:
-    """Client for interacting with Gemini LLM for agentic decision-making."""
+    """Client for interacting with Gemini LLM via LangChain for agentic decision-making."""
     
     def __init__(self):
-        # Using gemini-2.5-flash for faster, cost-effective generation
-        # Flash model is optimized for speed while maintaining good quality
-        self.model = genai.GenerativeModel('gemini-2.5-flash') if GEMINI_API_KEY else None
-        self.enabled = GEMINI_API_KEY is not None
+        """Initialize LLM client with LangChain."""
+        try:
+            # Create LangChain LLM instance using factory
+            self.llm = create_gemini_llm_for_json()
+            self.enabled = True
+            logger.info(f"LLMClient initialized with model: {settings.GEMINI_MODEL}")
+        except ValueError as e:
+            logger.warning(f"Failed to initialize LLM: {e}. LLM features will be disabled.")
+            self.llm = None
+            self.enabled = False
     
     async def generate_options(
         self,
@@ -91,7 +107,10 @@ class LLMClient:
         rag_context: Optional[Any] = None  # RAG integration
     ) -> Dict[str, Any]:
         """
-        Generate resolution options using LLM with full context.
+        Generate resolution options using LLM with structured output.
+        
+        Uses LangChain's with_structured_output() for type-safe responses.
+        Includes automatic reprompt on parse failures.
         
         Args:
             message_text: The resident's issue description
@@ -122,107 +141,65 @@ class LLMClient:
             }
         
         try:
-            # Use simplified prompt to avoid safety blocks
-            prompt = self._build_simple_prompt(
+            # Create LLM with structured output for SimulationOutputSchema
+            structured_llm = create_gemini_llm_with_schema(
+                schema=SimulationOutputSchema,
+                temperature=0.0,  # Deterministic for JSON
+                model="gemini-2.5-flash"  # Use flash for faster responses
+            )
+            
+            # Build prompt using template system
+            prompt = self._build_simulation_prompt_template(
                 message_text, category, urgency, risk_score, rag_context
             )
             
-            response = self.model.generate_content(
-                prompt,
-                generation_config=genai.GenerationConfig(
-                    response_mime_type="application/json",
-                    temperature=0.6,
-                    max_output_tokens=2048  # Increased to avoid truncation
-                )
-            )
-            
-            # Check finish reason
-            if response.candidates:
-                finish_reason = response.candidates[0].finish_reason
-                if finish_reason == 2:  # MAX_TOKENS
-                    raise ValueError("Response was truncated due to token limit")
-                elif finish_reason == 3:  # SAFETY
-                    raise ValueError("Response blocked by safety filters")
-                elif finish_reason == 4:  # RECITATION
-                    raise ValueError("Response blocked due to recitation")
-            
-            if not response or not response.text:
-                raise ValueError("Empty response from LLM")
-            
-            result = json.loads(response.text)
-            
-            # Handle both formats: {"options": [...]} and [...]
-            if isinstance(result, list):
-                # LLM returned array directly
-                options = result
-            elif isinstance(result, dict) and 'options' in result:
-                # LLM returned object with 'options' key
-                options = result['options']
-            else:
-                raise ValueError(f"Invalid response structure: expected list or dict with 'options', got {type(result)}")
-            
-            if not isinstance(options, list):
-                raise ValueError(f"Options must be a list, got {type(options)}")
-            
-            if len(options) < 2:
-                raise ValueError(f"Insufficient options generated: {len(options)} (expected at least 2)")
-            
-            # Validate each option
-            for idx, option in enumerate(options):
-                required_fields = ['option_id', 'action', 'estimated_cost']
-                # Check for either new field names or old field names for backward compatibility
-                if 'estimated_time' not in option and 'time_to_resolution' not in option:
-                    raise ValueError(f"Option {idx+1} missing time field (estimated_time or time_to_resolution)")
-                
-                for field in required_fields:
-                    if field not in option:
-                        raise ValueError(f"Option {idx+1} missing required field: {field}")
-            
-            logger.info(f"Successfully generated {len(options)} options for {resident_id}")
-            # Return in consistent format
-            return {'options': options}
-        
-        except json.JSONDecodeError as e:
-            error_msg = f"Failed to parse LLM response as JSON: {str(e)}"
-            logger.error(error_msg)
-            log_error_to_cloudwatch(
-                error_type="JSON_PARSE_ERROR",
-                error_message=error_msg,
+            # Parse with automatic reprompt on failure
+            result = await parse_with_reprompt(
+                llm=structured_llm,
+                initial_prompt=prompt,
+                schema=SimulationOutputSchema,
                 context={
                     'resident_id': resident_id,
                     'category': category,
                     'urgency': urgency,
-                    'response_text': response.text if response else None
-                }
+                    'risk_score': risk_score
+                },
+                log_error_fn=log_error_to_cloudwatch,
+                max_attempts=2
             )
-            return {
-                'error': {
-                    'type': 'JSON_PARSE_ERROR',
-                    'message': error_msg,
-                    'user_message': 'We encountered an error processing your request. Please escalate this issue to a human administrator for immediate assistance.'
-                }
-            }
-        
-        except ValueError as e:
-            error_msg = f"LLM response validation failed: {str(e)}"
-            logger.error(error_msg)
-            log_error_to_cloudwatch(
-                error_type="VALIDATION_ERROR",
-                error_message=error_msg,
-                context={
-                    'resident_id': resident_id,
-                    'category': category,
-                    'urgency': urgency
-                }
-            )
-            return {
-                'error': {
-                    'type': 'VALIDATION_ERROR',
-                    'message': error_msg,
-                    'user_message': 'We were unable to generate valid resolution options for your issue. Please escalate this to a human administrator who can assist you immediately.'
-                }
-            }
-        
+            
+            # Check if parsing succeeded
+            if result['success']:
+                options = result['data']['options']
+                reprompt_count = result['reprompt_count']
+                
+                logger.info(
+                    f"Successfully generated {len(options)} options for {resident_id} "
+                    f"(reprompt_count={reprompt_count})"
+                )
+                
+                return {'options': options}
+            else:
+                # Parsing failed after all attempts
+                error_dict = result['error']
+                logger.error(
+                    f"Failed to generate options for {resident_id} after "
+                    f"{result['reprompt_count']} reprompt(s): {error_dict['message']}"
+                )
+                return {'error': error_dict}
+                
+        except LLMTimeoutError as e:
+            logger.error(f"LLM timeout for {resident_id}: {str(e)}")
+            return e.to_dict()
+            
+        except LLMSafetyError as e:
+            logger.error(f"LLM safety block for {resident_id}: {str(e)}")
+            return e.to_dict()
+            
+        except LLMAPIError as e:
+            logger.error(f"LLM API error for {resident_id}: {str(e)}")
+            return e.to_dict()
+            
         except Exception as e:
             error_msg = f"Unexpected error during LLM generation: {str(e)}"
             logger.error(error_msg)
@@ -244,6 +221,166 @@ class LLMClient:
                 }
             }
     
+    async def extract_rules(
+        self,
+        category: str,
+        urgency: str,
+        rag_context: Optional[Any] = None
+    ) -> Dict[str, Any]:
+        """
+        Extract decision-making rules from policy documents using structured output.
+        
+        Uses RulesPrompt template and with_structured_output(RulesOutputSchema)
+        to parse policy rules into weights, caps, and escalation criteria.
+        
+        Args:
+            category: Issue category (Maintenance, Billing, etc.)
+            urgency: Urgency level (High, Medium, Low)
+            rag_context: Retrieved policy documents from knowledge base
+            
+        Returns:
+            Dict with 'rules' dict containing weights/caps/escalation or 'error' dict
+            
+        Example:
+            >>> result = await client.extract_rules(
+            ...     category="Maintenance",
+            ...     urgency="High",
+            ...     rag_context=rag_docs
+            ... )
+            >>> if 'rules' in result:
+            ...     weights = result['rules']['weights']
+            ...     caps = result['rules']['caps']
+        """
+        if not self.enabled:
+            return {
+                'error': {
+                    'type': 'LLM_NOT_CONFIGURED',
+                    'message': 'LLM service is not configured',
+                    'user_message': 'Unable to extract policy rules at this time'
+                }
+            }
+        
+        try:
+            from app.models.structured_schemas import RulesOutputSchema
+            from app.prompts.rules_prompt import RulesPrompt
+            
+            # Create LLM with structured output for RulesOutputSchema
+            structured_llm = create_gemini_llm_with_schema(
+                schema=RulesOutputSchema,
+                temperature=0.0,  # Deterministic for rule extraction
+                model="gemini-2.5-flash"
+            )
+            
+            # Extract documents from RAG context
+            retrieved_docs = []
+            if rag_context and hasattr(rag_context, 'retrieved_docs'):
+                retrieved_docs = rag_context.retrieved_docs
+            
+            # Build prompt using RulesPrompt template
+            rules_prompt = RulesPrompt(
+                category=category,
+                urgency=urgency,
+                retrieved_docs=retrieved_docs
+            )
+            prompt_text = rules_prompt.format()
+            
+            # Parse with automatic reprompt on failure
+            result = await parse_with_reprompt(
+                llm=structured_llm,
+                initial_prompt=prompt_text,
+                schema=RulesOutputSchema,
+                context={
+                    'category': category,
+                    'urgency': urgency,
+                    'doc_count': len(retrieved_docs)
+                },
+                log_error_fn=log_error_to_cloudwatch,
+                max_attempts=2
+            )
+            
+            # Check if parsing succeeded
+            if result['success']:
+                rules_data = result['data']
+                reprompt_count = result['reprompt_count']
+                
+                logger.info(
+                    f"Successfully extracted rules for {category}/{urgency} "
+                    f"(reprompt_count={reprompt_count}, sources={len(rules_data.get('sources', []))})"
+                )
+                
+                return {'rules': rules_data}
+            else:
+                # Parsing failed after all attempts
+                error_dict = result['error']
+                logger.error(
+                    f"Failed to extract rules for {category}/{urgency} after "
+                    f"{result['reprompt_count']} reprompt(s): {error_dict['message']}"
+                )
+                return {'error': error_dict}
+                
+        except Exception as e:
+            error_msg = f"Unexpected error during rules extraction: {str(e)}"
+            logger.error(error_msg)
+            log_error_to_cloudwatch(
+                error_type="RULES_EXTRACTION_ERROR",
+                error_message=error_msg,
+                context={
+                    'category': category,
+                    'urgency': urgency,
+                    'error_class': e.__class__.__name__
+                }
+            )
+            return {
+                'error': {
+                    'type': 'RULES_EXTRACTION_ERROR',
+                    'message': error_msg,
+                    'user_message': 'Unable to extract policy rules from documents'
+                }
+            }
+    
+    def _build_simulation_prompt_template(
+        self,
+        message_text: str,
+        category: str,
+        urgency: str,
+        risk_score: float,
+        rag_context: Optional[Any] = None
+    ) -> str:
+        """
+        Build simulation prompt using new template system.
+        
+        Uses SimulationPrompt template with citation-first design.
+        Falls back to simple prompt if template fails.
+        """
+        try:
+            from app.prompts import SimulationPrompt
+            
+            # Extract documents from RAG context
+            retrieved_docs = []
+            if rag_context and hasattr(rag_context, 'retrieved_docs'):
+                retrieved_docs = rag_context.retrieved_docs
+            
+            # Create template
+            template = SimulationPrompt(
+                issue_text=message_text,
+                category=category,
+                urgency=urgency,
+                retrieved_docs=retrieved_docs,
+                risk_score=risk_score
+            )
+            
+            # Render prompt
+            prompt = template.render()
+            logger.info(f"Using SimulationPrompt template ({template.get_metadata()})")
+            return prompt
+            
+        except Exception as e:
+            logger.warning(f"Failed to use SimulationPrompt template: {e}. Falling back to simple prompt.")
+            # Fall back to simple prompt
+            return self._build_simple_prompt(
+                message_text, category, urgency, risk_score, rag_context
+            )
+    
     def _build_simple_prompt(
         self,
         message_text: str,
@@ -264,18 +401,42 @@ class LLMClient:
                 rag_section += f"{i}. [{doc_id}] {text_preview}...\n"
             rag_section += "\nUse these KB documents to inform your options. Cite doc IDs when relevant.\n"
         
-        prompt = f"""Generate 3 resolution options for: "{message_text}"
+        prompt = f"""Generate exactly 3 different resolution options for: "{message_text}"
 Category: {category}, Urgency: {urgency}
 {rag_section}
-Return JSON with 3 options (fast/standard/budget):
-- option_id: "opt_1", "opt_2", "opt_3"
-- action: brief description (max 2 sentences)
-- estimated_cost: number
-- time_to_resolution: hours (number)
-- resident_satisfaction_impact: 0-1 (number)
-- reasoning: brief reason (max 1 sentence)
+IMPORTANT: You must provide exactly 3 options - no more, no less.
 
-Keep action and reasoning SHORT."""
+Return JSON with this exact structure:
+{{
+  "options": [
+    {{
+      "option_id": "opt_1",
+      "action": "First resolution approach",
+      "estimated_cost": 100,
+      "estimated_time": 2,
+      "reasoning": "Why this option is good",
+      "sources": []
+    }},
+    {{
+      "option_id": "opt_2",
+      "action": "Second resolution approach",
+      "estimated_cost": 200,
+      "estimated_time": 4,
+      "reasoning": "Why this option is better",
+      "sources": []
+    }},
+    {{
+      "option_id": "opt_3",
+      "action": "Third resolution approach",
+      "estimated_cost": 300,
+      "estimated_time": 8,
+      "reasoning": "Why this option is best",
+      "sources": []
+    }}
+  ]
+}}
+
+Keep action and reasoning brief but provide exactly 3 different options."""
         
         return prompt
     
@@ -486,14 +647,11 @@ Output JSON:
   "strategy_improvements": ["improvement 1"]
 }}"""
             
-            response = self.model.generate_content(
-                prompt,
-                generation_config=genai.GenerationConfig(
-                    response_mime_type="application/json"
-                )
-            )
+            # Use LangChain to invoke LLM
+            response = self.llm.invoke(prompt)
+            response_text = response.content if hasattr(response, 'content') else str(response)
             
-            return json.loads(response.text)
+            return json.loads(response_text)
         
         except Exception as e:
             logger.error(f"Feedback analysis failed: {e}")

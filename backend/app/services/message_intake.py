@@ -18,18 +18,20 @@ from app.services.governance import log_decision  # Added for Ticket 15
 from app.utils.helpers import generate_request_id
 from datetime import datetime, timezone
 import re
-import os
 import json
 import boto3
 import logging
+
+from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Environment
-REGION = os.getenv("AWS_REGION")
-SQS_URL = os.getenv("AWS_SQS_QUEUE_URL")
+# Get configuration from centralized settings
+settings = get_settings()
+REGION = settings.AWS_REGION
+SQS_URL = settings.AWS_SQS_QUEUE_URL
 sqs = boto3.client("sqs", region_name=REGION) if SQS_URL else None
 
 

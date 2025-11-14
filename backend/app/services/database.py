@@ -9,17 +9,21 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
 from decimal import Decimal
 from app.models.schemas import ResidentRequest, Status
-import os
 import logging
+
+from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
+# Get configuration from centralized settings
+settings = get_settings()
+
 dynamodb = boto3.resource(
     'dynamodb',
-    region_name=os.getenv('AWS_REGION', 'us-west-2')
+    region_name=settings.AWS_REGION
 )
 
-TABLE_NAME = os.getenv('AWS_DYNAMODB_TABLE_NAME', 'aam_requests')
+TABLE_NAME = settings.AWS_DYNAMODB_TABLE_NAME
 
 
 def get_table():

@@ -1,0 +1,31 @@
+---
+doc_id: "COST_001"
+type: "cost"
+category: "labor_rates"
+building_id: "all_buildings"
+effective_date: "2024-01-01"
+last_updated: "2025-11-13"
+version: "1.0"
+keywords: ["labor", "hourly rate", "billing", "trade", "craftsman"]
+author: "Property Management"
+approver: "Finance Director"
+---
+Trade,Skill_Level,Hourly_Rate_USD,Minimum_Billable_Hours,Billing_Increment_Minutes,After_Hours_Multiplier,Weekend_Multiplier,Holiday_Multiplier,On_Call_Fee_USD,Travel_Fee_USD,Travel_Per_Mile_USD,Diagnostic_Fee_USD,Waiting_Time_Rate_USD
+Plumber,Standard,85.00,1.0,30,1.5,1.5,2.0,50.00,25.00,2.50,75.00,85.00
+Plumber,Master,120.00,1.0,30,1.5,1.5,2.0,75.00,25.00,2.50,100.00,120.00
+HVAC,Standard,90.00,1.0,30,1.5,1.5,2.0,50.00,25.00,2.50,85.00,90.00
+HVAC,Certified,125.00,1.0,30,1.5,1.5,2.0,75.00,25.00,2.50,110.00,125.00
+Electrician,Journeyman,95.00,1.0,30,1.5,1.5,2.0,50.00,25.00,2.50,90.00,95.00
+Electrician,Master,135.00,1.0,30,1.5,1.5,2.0,75.00,25.00,2.50,120.00,135.00
+Locksmith,Standard,75.00,1.0,30,2.0,2.0,2.5,40.00,20.00,2.00,60.00,75.00
+Locksmith,Security_Specialist,110.00,1.0,30,2.0,2.0,2.5,60.00,20.00,2.00,90.00,110.00
+Cleaner,Standard,35.00,2.0,60,1.5,1.5,2.0,0.00,15.00,1.50,0.00,35.00
+Cleaner,Deep_Clean_Specialist,50.00,2.0,60,1.5,1.5,2.0,0.00,15.00,1.50,0.00,50.00
+Handyman,General,65.00,1.0,30,1.5,1.5,2.0,35.00,20.00,2.00,50.00,65.00
+Handyman,Skilled,85.00,1.0,30,1.5,1.5,2.0,40.00,20.00,2.00,65.00,85.00
+Carpenter,Journeyman,80.00,1.0,30,1.5,1.5,2.0,45.00,25.00,2.50,70.00,80.00
+Painter,Standard,55.00,2.0,60,1.5,1.5,2.0,30.00,20.00,2.00,45.00,55.00
+Appliance_Repair,Certified,75.00,1.0,30,1.5,1.5,2.0,40.00,25.00,2.50,70.00,75.00
+Pest_Control,Licensed,70.00,1.0,60,1.5,1.5,2.0,35.00,20.00,2.00,60.00,70.00
+Landscaper,Standard,45.00,2.0,60,1.5,1.5,2.0,0.00,15.00,1.50,0.00,45.00
+Roofer,Journeyman,90.00,2.0,30,1.5,1.5,2.0,50.00,30.00,3.00,80.00,90.00

@@ -3,7 +3,9 @@ load_dotenv()  # Load environment variables from .env file FIRST
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.models.schemas import HealthCheck
+from app.models.schemas import HealthCheck, VectorStoreHealth
+from app.rag.vector_store import health_check as vector_store_health_check
+from app.config import get_settings
 
 app = FastAPI(
     title="Agentic Apartment Manager API",
@@ -28,6 +30,44 @@ async def root():
 @app.get("/health", response_model=HealthCheck)
 async def health_check():
     return {"status": "healthy", "service": "Agentic Apartment Manager API"}
+
+
+@app.get("/health/vector-store", response_model=VectorStoreHealth)
+async def vector_store_health():
+    """
+    Check health of the vector store.
+    
+    Returns:
+        VectorStoreHealth: Status, collection existence, document count
+    """
+    settings = get_settings()
+    health = vector_store_health_check(
+        persist_directory=settings.PERSIST_DIR,
+        collection_name=settings.COLLECTION_NAME
+    )
+    return health
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Check vector store health on startup."""
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    settings = get_settings()
+    health = vector_store_health_check(
+        persist_directory=settings.PERSIST_DIR,
+        collection_name=settings.COLLECTION_NAME
+    )
+    
+    if health["status"] == "healthy":
+        logger.info(
+            f"✅ Vector store healthy: {health['document_count']} documents in '{settings.COLLECTION_NAME}'"
+        )
+    else:
+        logger.warning(
+            f"⚠️  Vector store unhealthy: {health.get('error', 'unknown error')}"
+        )
 
 
 from app.agents import classification_agent, risk_prediction_agent, simulation_agent, decision_agent

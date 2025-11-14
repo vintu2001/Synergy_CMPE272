@@ -9,15 +9,19 @@ from app.models.schemas import (
     PolicyWeights, DecisionReasoning, SimulatedOption, PolicyConfiguration,
     CostAnalysis, TimeAnalysis, DecisionRequest, DecisionResponseWithStatus
 )
-from app.rag.retriever import retrieve_decision_rules  # RAG integration
+from app.rag.retriever import retrieve_for_decision  # RAG integration with MMR
 from datetime import datetime
 import time
 import logging
-import os
 from typing import List, Dict, Tuple, Optional
 from statistics import mean
 
+from app.config import get_settings
+
 logger = logging.getLogger(__name__)
+
+# Get configuration from centralized settings
+settings = get_settings()
 
 # Default configurations
 DEFAULT_WEIGHTS = PolicyWeights()
@@ -345,7 +349,7 @@ async def make_decision(
         rule_sources = []
         
         # Check if RAG is enabled
-        rag_enabled = os.getenv('RAG_ENABLED', 'false').lower() == 'true'
+        rag_enabled = settings.RAG_ENABLED
         
         if rag_enabled:
             try:
@@ -357,13 +361,12 @@ async def make_decision(
                 ]
                 rule_query = " ".join(query_parts)
                 
-                # Retrieve policy documents for decision rules
-                rag_context = await retrieve_decision_rules(
-                    query=rule_query,
-                    category=request.classification.category.value,
-                    urgency=request.classification.urgency.value,
+                # Retrieve policy documents using MMR for decision rules
+                rag_context = await retrieve_for_decision(
+                    issue_text=rule_query,
                     building_id=None,  # Will be extracted from options if available
-                    top_k=3  # Fewer documents for decision agent (higher precision)
+                    category=request.classification.category.value,
+                    k=3  # Fewer documents for decision agent (higher precision)
                 )
                 
                 if rag_context and rag_context.retrieved_docs:

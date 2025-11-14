@@ -11,13 +11,16 @@ from app.models.schemas import (
 from app.services.governance import (
     query_governance_logs, get_governance_stats, export_governance_logs
 )
-import os
 import logging
+
+from app.config import get_settings
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "admin_secret_key_12345")
+# Get ADMIN_API_KEY from centralized settings
+settings = get_settings()
+ADMIN_API_KEY = settings.ADMIN_API_KEY
 
 
 def verify_admin_key(x_api_key: str = Header(...)):

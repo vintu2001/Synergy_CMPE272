@@ -5,15 +5,19 @@ Hybrid approach: Rule-based (fast) + Gemini fallback (accurate)
 """
 from fastapi import APIRouter
 from app.models.schemas import MessageRequest, ClassificationResponse, IssueCategory, Urgency, Intent
-import os
 import re
 from typing import Tuple, Optional
 import json
 from dotenv import load_dotenv
 
+from app.config import get_settings
+
 load_dotenv()
 
 router = APIRouter()
+
+# Get configuration from centralized settings
+settings = get_settings()
 
 # Rule-based classification keywords
 URGENCY_KEYWORDS = {
@@ -131,13 +135,13 @@ async def gemini_classification(message_text: str) -> ClassificationResponse:
     try:
         import google.generativeai as genai
         
-        api_key = os.getenv('GEMINI_API_KEY')
+        api_key = settings.GEMINI_API_KEY
         logger.info(f"[GEMINI] API Key present: {bool(api_key)}")
         if not api_key:
             raise ValueError("GEMINI_API_KEY not found in environment")
         
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        model = genai.GenerativeModel(settings.GEMINI_MODEL)
         
         prompt = f"""You are an apartment management assistant. Classify this resident message into structured data.
 

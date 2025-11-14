@@ -36,6 +36,13 @@ class HealthCheck(BaseModel):
     service: str
 
 
+class VectorStoreHealth(BaseModel):
+    status: str = Field(..., description="Health status: 'healthy' or 'unhealthy'")
+    collection_exists: bool = Field(..., description="Whether the collection exists")
+    document_count: int = Field(..., description="Number of documents in the collection")
+    error: Optional[str] = Field(None, description="Error message if unhealthy")
+
+
 class MessageRequest(BaseModel):
     resident_id: str = Field(..., description="Resident identifier")
     message_text: str = Field(..., description="Freeform text message from resident")
@@ -66,6 +73,7 @@ class SimulatedOption(BaseModel):
     estimated_time: float = Field(..., ge=0, description="Estimated time to resolution in hours")
     reasoning: str = Field(..., description="Explanation for why this option was simulated")
     source_doc_ids: Optional[List[str]] = Field(None, description="KB document IDs used to generate this option (RAG Phase 1)")
+    satisfaction_score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Predicted resident satisfaction score (Step 10)")
 
 
 class SimulationResponse(BaseModel):
