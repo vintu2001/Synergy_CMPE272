@@ -4,7 +4,6 @@ from fastapi.middleware.cors import CORSMiddleware
 import sys
 import os
 
-# Add libs to path for shared models
 sys.path.insert(0, '/app/libs')
 
 from shared_models import (
@@ -23,18 +22,15 @@ import json
 import uuid
 import watchtower
 
-# Configure logging with CloudWatch
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-# Add console handler for local development
 console_handler = logging.StreamHandler()
 console_handler.setLevel(logging.INFO)
 console_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 console_handler.setFormatter(console_formatter)
 logger.addHandler(console_handler)
 
-# Add CloudWatch handler for AWS
 try:
     AWS_REGION = os.getenv('AWS_REGION', 'us-east-1')
     cloudwatch_handler = watchtower.CloudWatchLogHandler(
@@ -50,31 +46,26 @@ except Exception as e:
 
 app = FastAPI(title="governance-service", version="1.0.0")
 
-# CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Environment configuration
 ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "admin_secret_key_12345")
 AWS_REGION = os.getenv('AWS_REGION', 'us-east-1')
 GOVERNANCE_TABLE_NAME = os.getenv('AWS_DYNAMODB_GOVERNANCE_TABLE', 'aam_governance_logs')
 
-# DynamoDB client
 dynamodb = boto3.resource('dynamodb', region_name=AWS_REGION)
 
 
 def get_governance_table():
-    """Get the governance logs DynamoDB table."""
     return dynamodb.Table(GOVERNANCE_TABLE_NAME)
 
 
 def convert_floats_to_decimal(obj: Any) -> Any:
-    """Recursively convert float values to Decimal for DynamoDB compatibility."""
     if isinstance(obj, float):
         return Decimal(str(obj))
     elif hasattr(obj, 'value'):  # Handle Enum types
@@ -87,7 +78,6 @@ def convert_floats_to_decimal(obj: Any) -> Any:
 
 
 def convert_decimals_to_float(obj: Any) -> Any:
-    """Recursively convert Decimal values to float for JSON serialization."""
     if isinstance(obj, Decimal):
         return float(obj)
     elif isinstance(obj, dict):
@@ -98,13 +88,11 @@ def convert_decimals_to_float(obj: Any) -> Any:
 
 
 def generate_log_id() -> str:
-    """Generate a unique governance log ID."""
     timestamp = datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')
     return f"GOV_{timestamp}_{uuid.uuid4().hex[:8].upper()}"
 
 
 def verify_admin_key(x_api_key: str = Header(...)):
-    """Verify admin API key for governance access."""
     if x_api_key != ADMIN_API_KEY:
         raise HTTPException(status_code=403, detail="Invalid API key")
     return True
@@ -112,13 +100,11 @@ def verify_admin_key(x_api_key: str = Header(...)):
 
 @app.get("/health", response_model=HealthCheck)
 async def health():
-    """Health check endpoint"""
     return HealthCheck(status="healthy", service="governance")
 
 
 @app.post("/api/governance/verify")
 async def verify_admin(x_api_key: str = Header(..., alias="X-API-Key")):
-    """Verify admin API key"""
     try:
         verify_admin_key(x_api_key)
         return {"valid": True, "role": "admin"}
@@ -128,10 +114,6 @@ async def verify_admin(x_api_key: str = Header(..., alias="X-API-Key")):
 
 @app.post("/api/governance/log")
 async def log_decision(log_data: Dict[str, Any]):
-    """
-    Log a decision to the governance system.
-    Called by other services to record AI decisions.
-    """
     try:
         log_id = generate_log_id()
         
@@ -147,7 +129,6 @@ async def log_decision(log_data: Dict[str, Any]):
         exceeds_time_threshold = log_data.get("exceeds_time_threshold", False)
         policy_weights = log_data.get("policy_weights")
         
-        # Build governance log entry
         governance_log = {
             'log_id': log_id,
             'request_id': request_id,
@@ -173,10 +154,8 @@ async def log_decision(log_data: Dict[str, Any]):
             'policy_weights': policy_weights or {}
         }
         
-        # Convert floats to Decimal for DynamoDB
         governance_log_db = convert_floats_to_decimal(governance_log)
         
-        # Store in DynamoDB
         table = get_governance_table()
         table.put_item(Item=governance_log_db)
         
@@ -194,13 +173,11 @@ async def query_logs(
     query: GovernanceQueryRequest,
     x_api_key: str = Header(..., alias="X-API-Key")
 ):
-    """Query governance logs with filters"""
     verify_admin_key(x_api_key)
     
     try:
         table = get_governance_table()
         
-        # Build filter expression
         filter_expression = None
         filters_applied = {}
         
@@ -228,7 +205,6 @@ async def query_logs(
             filter_expression = expr if filter_expression is None else filter_expression & expr
             filters_applied['escalated_only'] = True
         
-        # Perform scan with filter
         scan_kwargs = {'Limit': query.limit}
         if filter_expression:
             scan_kwargs['FilterExpression'] = filter_expression
@@ -236,10 +212,8 @@ async def query_logs(
         response = table.scan(**scan_kwargs)
         items = response.get('Items', [])
         
-        # Convert Decimals to float
         items = convert_decimals_to_float(items)
         
-        # Convert to GovernanceLog objects
         logs = []
         for item in items:
             try:
@@ -261,7 +235,6 @@ async def query_logs(
 
 @app.get("/api/governance/stats", response_model=GovernanceStatsResponse)
 async def get_stats(x_api_key: str = Header(..., alias="X-API-Key")):
-    """Get aggregate statistics about governance logs"""
     verify_admin_key(x_api_key)
     
     try:
@@ -269,10 +242,8 @@ async def get_stats(x_api_key: str = Header(..., alias="X-API-Key")):
         response = table.scan()
         items = response.get('Items', [])
         
-        # Convert Decimals
         items = convert_decimals_to_float(items)
         
-        # Calculate statistics
         total_decisions = len(items)
         total_escalations = sum(1 for item in items if item.get('escalated', False))
         escalation_rate = total_escalations / total_decisions if total_decisions > 0 else 0.0
@@ -282,7 +253,6 @@ async def get_stats(x_api_key: str = Header(..., alias="X-API-Key")):
         average_cost = sum(costs) / len(costs) if costs else 0.0
         average_time = sum(times) / len(times) if times else 0.0
         
-        # Group by category and urgency
         decisions_by_category = {}
         decisions_by_urgency = {}
         
@@ -317,7 +287,6 @@ async def export_logs(
     format: str = "json",
     x_api_key: str = Header(..., alias="X-API-Key")
 ):
-    """Export all governance logs for compliance/audit purposes"""
     verify_admin_key(x_api_key)
     
     if format not in ["json", "csv"]:
@@ -330,7 +299,6 @@ async def export_logs(
         items = convert_decimals_to_float(items)
         
         if format == "csv":
-            # Simple CSV export
             if not items:
                 return PlainTextResponse(
                     content="",
@@ -352,7 +320,6 @@ async def export_logs(
                 headers={"Content-Disposition": "attachment; filename=governance_logs.csv"}
             )
         else:
-            # JSON export
             json_content = json.dumps(items, indent=2, default=str)
             return PlainTextResponse(
                 content=json_content,

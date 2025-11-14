@@ -1,8 +1,3 @@
-"""
-Message Intake Microservice
-Handles request submission, option selection, and request resolution
-Calls Decision Engine and Governance services via HTTP
-"""
 from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 import sys
@@ -11,19 +6,17 @@ import httpx
 import logging
 import time
 import re
-import json
 import boto3
 from datetime import datetime, timezone
 
-# Add libs to path for shared models
 sys.path.insert(0, '/app/libs')
 
 from shared_models import (
     MessageRequest, Status, ResidentRequest, ClassificationResponse,
-    SimulationResponse, PolicyWeights, PolicyConfiguration, DecisionResponse,
-    DecisionRequest, SelectOptionRequest, ResolveRequestModel, HealthCheck
+    SimulationResponse, PolicyWeights, PolicyConfiguration,
+    SelectOptionRequest, ResolveRequestModel, HealthCheck
 )
-from app.services.database import create_request, update_request_status, get_request_by_id
+from app.services.database import create_request, get_request_by_id
 from app.utils.helpers import generate_request_id
 from app.utils.cloudwatch_logger import (
     log_request_submission, log_classification, log_risk_assessment,
@@ -31,18 +24,15 @@ from app.utils.cloudwatch_logger import (
 )
 import watchtower
 
-# Configure logging with CloudWatch
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-# Add console handler for local development
 console_handler = logging.StreamHandler()
 console_handler.setLevel(logging.INFO)
 console_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 console_handler.setFormatter(console_formatter)
 logger.addHandler(console_handler)
 
-# Add CloudWatch handler for AWS
 try:
     AWS_REGION = os.getenv('AWS_REGION', 'us-east-1')
     cloudwatch_handler = watchtower.CloudWatchLogHandler(
@@ -58,20 +48,17 @@ except Exception as e:
 
 app = FastAPI(title="message-intake-service", version="1.0.0")
 
-# CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Service URLs
 DECISION_ENGINE_URL = os.getenv("DECISION_ENGINE_URL", "http://decision-engine:8002")
 GOVERNANCE_URL = os.getenv("GOVERNANCE_URL", "http://governance:8001")
 
-# Initialize CloudWatch logs on startup
 try:
     ensure_log_stream()
     logger.info("CloudWatch log stream initialized")
@@ -80,7 +67,6 @@ except Exception as e:
 
 
 def normalize_text(text: str) -> str:
-    """Normalize text before processing."""
     normalized = text.lower()
     normalized = re.sub(r'\s+', ' ', normalized)
     normalized = re.sub(r'[^a-z0-9\s.,!?]', '', normalized)
@@ -89,16 +75,11 @@ def normalize_text(text: str) -> str:
 
 @app.get("/health", response_model=HealthCheck)
 async def health():
-    """Health check endpoint"""
     return HealthCheck(status="healthy", service="message-intake")
 
 
 @app.post("/api/requests/submit")
 async def submit_request(request: MessageRequest):
-    """
-    Submit a resident request with automatic classification, risk prediction, and resolution simulation.
-    Calls decision-engine service for all ML operations.
-    """
     start_time = time.time()
     request_id = generate_request_id()
     
@@ -106,7 +87,6 @@ async def submit_request(request: MessageRequest):
         logger.info(f"Processing request for resident: {request.resident_id}")
         _normalized_text = normalize_text(request.message_text)
         
-        # Call decision-engine for classification
         async with httpx.AsyncClient(timeout=30.0) as client:
             classification_response = await client.post(
                 f"{DECISION_ENGINE_URL}/api/classify",
@@ -119,7 +99,6 @@ async def submit_request(request: MessageRequest):
         final_category = request.category if request.category else classification.category
         final_urgency = request.urgency if request.urgency else classification.urgency
         
-        # Log classification to CloudWatch
         log_classification(
             request_id=request_id,
             category=final_category.value,
@@ -128,7 +107,6 @@ async def submit_request(request: MessageRequest):
             confidence=classification.confidence
         )
         
-        # Call decision-engine for risk prediction
         risk_score = None
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
@@ -147,7 +125,6 @@ async def submit_request(request: MessageRequest):
                 risk_score = risk_data.get("risk_forecast")
                 logger.info(f"Risk prediction successful: {risk_score:.4f}")
                 
-                # Log risk assessment to CloudWatch
                 risk_level = "High" if risk_score > 0.7 else "Medium" if risk_score > 0.3 else "Low"
                 log_risk_assessment(
                     request_id=request_id,
@@ -157,7 +134,6 @@ async def submit_request(request: MessageRequest):
         except Exception as risk_error:
             logger.warning(f"Risk prediction failed (non-critical): {risk_error}")
         
-        # Call decision-engine for simulation
         simulation_result = None
         simulated_options = None
         recommended_option_id = None
@@ -196,7 +172,6 @@ async def submit_request(request: MessageRequest):
         except Exception as sim_error:
             logger.warning(f"Simulation failed (non-critical): {sim_error}")
         
-        # Get AI recommendation from decision-engine
         if simulation_result:
             try:
                 async with httpx.AsyncClient(timeout=30.0) as client:
@@ -216,7 +191,6 @@ async def submit_request(request: MessageRequest):
             except Exception as decision_error:
                 logger.warning(f"Decision recommendation failed (non-critical): {decision_error}")
         
-        # Store request in database
         now = datetime.now(timezone.utc)
         resident_request = ResidentRequest(
             request_id=request_id,
@@ -239,7 +213,6 @@ async def submit_request(request: MessageRequest):
         if not success:
             raise HTTPException(status_code=500, detail="Failed to save request to database")
         
-        # Build response
         response_data = {
             "status": "submitted",
             "message": "Request submitted successfully!",
@@ -263,7 +236,6 @@ async def submit_request(request: MessageRequest):
                 "recommended_option_id": recommended_option_id
             }
             
-            # Log simulation to CloudWatch
             log_simulation_result(
                 request_id=request_id,
                 option_count=len(simulation_result.options),
@@ -271,7 +243,6 @@ async def submit_request(request: MessageRequest):
                 is_repeat=False
             )
         
-        # Log final request submission to CloudWatch
         processing_time = (time.time() - start_time) * 1000
         log_request_submission(
             request_id=request_id,
@@ -302,17 +273,11 @@ async def submit_request(request: MessageRequest):
 
 @app.post("/api/requests/select")
 async def select_option(selection: SelectOptionRequest):
-    """
-    Resident selects an option from the simulated options.
-    This triggers execution and governance logging.
-    """
     try:
-        # Get the request
         request = get_request_by_id(selection.request_id)
         if not request:
             raise HTTPException(status_code=404, detail="Request not found")
         
-        # Update database with selected option
         from app.services.database import get_table
         table = get_table()
         table.update_item(
@@ -326,7 +291,6 @@ async def select_option(selection: SelectOptionRequest):
             }
         )
         
-        # Find selected option details
         selected_option_data = None
         if request.get("simulated_options"):
             for opt in request["simulated_options"]:
@@ -334,7 +298,6 @@ async def select_option(selection: SelectOptionRequest):
                     selected_option_data = opt
                     break
         
-        # Call governance service to log the decision
         if selected_option_data:
             try:
                 async with httpx.AsyncClient(timeout=10.0) as client:
@@ -384,7 +347,6 @@ async def select_option(selection: SelectOptionRequest):
 
 @app.post("/api/requests/resolve")
 async def resolve_request(resolve: ResolveRequestModel):
-    """Mark a request as resolved"""
     try:
         request = get_request_by_id(resolve.request_id)
         if not request:
@@ -420,7 +382,6 @@ async def resolve_request(resolve: ResolveRequestModel):
 
 @app.get("/api/requests/{resident_id}")
 async def get_resident_requests_endpoint(resident_id: str):
-    """Get all requests for a specific resident"""
     try:
         from app.services.database import get_requests_by_resident
         requests = get_requests_by_resident(resident_id)
@@ -432,9 +393,7 @@ async def get_resident_requests_endpoint(resident_id: str):
 
 @app.get("/api/admin/all-requests")
 async def get_all_requests_endpoint(x_api_key: str = Header(..., alias="X-API-Key")):
-    """Get all requests (admin only)"""
     try:
-        # Verify admin API key
         admin_key = os.getenv("ADMIN_API_KEY", "yes")
         if x_api_key != admin_key:
             raise HTTPException(status_code=403, detail="Invalid API key")

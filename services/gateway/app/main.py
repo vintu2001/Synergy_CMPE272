@@ -1,7 +1,3 @@
-"""
-API Gateway
-Routes requests to appropriate microservices
-"""
 from fastapi import FastAPI, Request, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -12,18 +8,15 @@ import boto3
 import watchtower
 from typing import Dict
 
-# Configure logging with CloudWatch
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-# Add console handler for local development
 console_handler = logging.StreamHandler()
 console_handler.setLevel(logging.INFO)
 console_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 console_handler.setFormatter(console_formatter)
 logger.addHandler(console_handler)
 
-# Add CloudWatch handler for AWS
 try:
     AWS_REGION = os.getenv('AWS_REGION', 'us-east-1')
     cloudwatch_handler = watchtower.CloudWatchLogHandler(
@@ -39,16 +32,14 @@ except Exception as e:
 
 app = FastAPI(title="api-gateway", version="1.0.0")
 
-# CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Service URLs
 SERVICES = {
     "message-intake": os.getenv("MESSAGE_INTAKE_URL", "http://message-intake:8003"),
     "decision-engine": os.getenv("DECISION_ENGINE_URL", "http://decision-engine:8002"),
@@ -58,7 +49,6 @@ SERVICES = {
 
 @app.get("/health")
 async def health():
-    """Gateway health check and downstream service health"""
     health_checks = {"gateway": "healthy"}
     
     async with httpx.AsyncClient(timeout=5.0) as client:
@@ -75,10 +65,8 @@ async def health():
     return {"status": "healthy", "services": health_checks}
 
 
-# Message Intake endpoints
 @app.post("/api/requests/submit")
 async def submit_request(request: Request):
-    """Forward to message-intake service"""
     try:
         body = await request.json()
         async with httpx.AsyncClient(timeout=60.0) as client:
@@ -97,7 +85,6 @@ async def submit_request(request: Request):
 
 @app.post("/api/requests/select")
 async def select_option(request: Request):
-    """Forward to message-intake service"""
     try:
         body = await request.json()
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -116,7 +103,6 @@ async def select_option(request: Request):
 
 @app.post("/api/requests/resolve")
 async def resolve_request(request: Request):
-    """Forward to message-intake service"""
     try:
         body = await request.json()
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -133,10 +119,8 @@ async def resolve_request(request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# Governance endpoints
 @app.post("/api/governance/query")
 async def query_governance(request: Request, x_api_key: str = Header(..., alias="X-API-Key")):
-    """Forward to governance service"""
     try:
         body = await request.json()
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -156,7 +140,6 @@ async def query_governance(request: Request, x_api_key: str = Header(..., alias=
 
 @app.get("/api/governance/stats")
 async def get_governance_stats(x_api_key: str = Header(..., alias="X-API-Key")):
-    """Forward to governance service"""
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.get(
@@ -174,7 +157,6 @@ async def get_governance_stats(x_api_key: str = Header(..., alias="X-API-Key")):
 
 @app.get("/api/governance/export")
 async def export_governance(format: str = "json", x_api_key: str = Header(..., alias="X-API-Key")):
-    """Forward to governance service"""
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.get(
@@ -193,12 +175,8 @@ async def export_governance(format: str = "json", x_api_key: str = Header(..., a
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# Admin and resident endpoints (proxy to backend database service if needed)
-# For now, these can also be routed through message-intake or a separate admin service
-
 @app.post("/api/classify")
 async def classify_message(request: Request):
-    """Forward to decision-engine service for classification"""
     try:
         body = await request.json()
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -217,7 +195,6 @@ async def classify_message(request: Request):
 
 @app.get("/api/requests/{resident_id}")
 async def get_resident_requests(resident_id: str):
-    """Forward to message-intake service to get resident's requests"""
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.get(
@@ -234,7 +211,6 @@ async def get_resident_requests(resident_id: str):
 
 @app.get("/api/admin/all-requests")
 async def get_all_requests(x_api_key: str = Header(..., alias="X-API-Key")):
-    """Forward to message-intake service to get all requests (admin only)"""
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.get(
