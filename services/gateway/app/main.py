@@ -196,6 +196,60 @@ async def export_governance(format: str = "json", x_api_key: str = Header(..., a
 # Admin and resident endpoints (proxy to backend database service if needed)
 # For now, these can also be routed through message-intake or a separate admin service
 
+@app.post("/api/classify")
+async def classify_message(request: Request):
+    """Forward to decision-engine service for classification"""
+    try:
+        body = await request.json()
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                f"{SERVICES['decision-engine']}/api/classify",
+                json=body
+            )
+            resp.raise_for_status()
+            return resp.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except Exception as e:
+        logger.error(f"Error forwarding to decision-engine: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/requests/{resident_id}")
+async def get_resident_requests(resident_id: str):
+    """Forward to message-intake service to get resident's requests"""
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(
+                f"{SERVICES['message-intake']}/api/requests/{resident_id}"
+            )
+            resp.raise_for_status()
+            return resp.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except Exception as e:
+        logger.error(f"Error forwarding to message-intake: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/admin/all-requests")
+async def get_all_requests(x_api_key: str = Header(..., alias="X-API-Key")):
+    """Forward to message-intake service to get all requests (admin only)"""
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(
+                f"{SERVICES['message-intake']}/api/admin/all-requests",
+                headers={"X-API-Key": x_api_key}
+            )
+            resp.raise_for_status()
+            return resp.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except Exception as e:
+        logger.error(f"Error forwarding to message-intake: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

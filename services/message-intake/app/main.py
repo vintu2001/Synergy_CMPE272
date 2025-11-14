@@ -3,7 +3,7 @@ Message Intake Microservice
 Handles request submission, option selection, and request resolution
 Calls Decision Engine and Governance services via HTTP
 """
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 import sys
 import os
@@ -167,8 +167,14 @@ async def submit_request(request: MessageRequest):
                 sim_response = await client.post(
                     f"{DECISION_ENGINE_URL}/api/simulate",
                     json={
-                        "category": final_category.value,
-                        "urgency": final_urgency.value,
+                        "classification": {
+                            "category": final_category.value,
+                            "urgency": final_urgency.value,
+                            "intent": classification.intent.value,
+                            "confidence": classification.confidence,
+                            "message_text": request.message_text,
+                            "resident_id": request.resident_id
+                        },
                         "risk_score": risk_score if risk_score is not None else 0.5
                     }
                 )
@@ -410,6 +416,37 @@ async def resolve_request(resolve: ResolveRequestModel):
     except Exception as e:
         logger.error(f"Error resolving request: {e}")
         raise HTTPException(status_code=500, detail=f"Error resolving request: {str(e)}")
+
+
+@app.get("/api/requests/{resident_id}")
+async def get_resident_requests_endpoint(resident_id: str):
+    """Get all requests for a specific resident"""
+    try:
+        from app.services.database import get_requests_by_resident
+        requests = get_requests_by_resident(resident_id)
+        return {"requests": requests}
+    except Exception as e:
+        logger.error(f"Error getting resident requests: {e}")
+        raise HTTPException(status_code=500, detail=f"Error getting resident requests: {str(e)}")
+
+
+@app.get("/api/admin/all-requests")
+async def get_all_requests_endpoint(x_api_key: str = Header(..., alias="X-API-Key")):
+    """Get all requests (admin only)"""
+    try:
+        # Verify admin API key
+        admin_key = os.getenv("ADMIN_API_KEY", "yes")
+        if x_api_key != admin_key:
+            raise HTTPException(status_code=403, detail="Invalid API key")
+        
+        from app.services.database import get_all_requests
+        requests = get_all_requests()
+        return {"requests": requests}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting all requests: {e}")
+        raise HTTPException(status_code=500, detail=f"Error getting all requests: {str(e)}")
 
 
 if __name__ == "__main__":

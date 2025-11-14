@@ -3,6 +3,7 @@ Simulation Agent
 Generates multiple resolution options and simulates their outcomes using SimPy.
 """
 from fastapi import APIRouter
+from pydantic import BaseModel
 import sys
 import os
 sys.path.insert(0, '/app/libs')
@@ -14,6 +15,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+class SimulationRequest(BaseModel):
+    """Request model for simulation endpoint"""
+    classification: ClassificationResponse
+    risk_score: float = 0.5
 
 
 class ResolutionSimulator:
@@ -418,32 +425,28 @@ simulator = ResolutionSimulator()
 
 
 @router.post("/simulate", response_model=SimulationResponse)
-async def simulate_resolutions(
-    classification: ClassificationResponse,
-    risk_score: float = 0.5
-) -> SimulationResponse:
+async def simulate_resolutions(request: SimulationRequest) -> SimulationResponse:
     """
     Generate multiple resolution options using SimPy simulation.
     
     Args:
-        classification: Classified message with category, urgency
-        risk_score: Risk forecast score (0.0-1.0), defaults to 0.5 if not provided
+        request: SimulationRequest containing classification and risk_score
     
     Returns:
         SimulationResponse with 3+ simulated resolution options
     """
     try:
         options = simulator.generate_options(
-            category=classification.category,
-            urgency=classification.urgency,
-            risk_score=risk_score
+            category=request.classification.category,
+            urgency=request.classification.urgency,
+            risk_score=request.risk_score
         )
         
-        logger.info(f"Generated {len(options)} options for {classification.category.value}/{classification.urgency.value} (risk: {risk_score:.2f})")
+        logger.info(f"Generated {len(options)} options for {request.classification.category.value}/{request.classification.urgency.value} (risk: {request.risk_score:.2f})")
         
         return SimulationResponse(
             options=options,
-            issue_id=f"sim_{classification.category.value}_{classification.urgency.value}"
+            issue_id=f"sim_{request.classification.category.value}_{request.classification.urgency.value}"
         )
     
     except Exception as e:
