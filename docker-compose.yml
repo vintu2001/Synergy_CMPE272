@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  # API Gateway
+  gateway:
+    build:
+      context: ./services/gateway
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    environment:
+      - MESSAGE_INTAKE_URL=http://message-intake:8003
+      - DECISION_ENGINE_URL=http://decision-engine:8002
+      - GOVERNANCE_URL=http://governance:8001
+    depends_on:
+      - message-intake
+      - decision-engine
+      - governance
+    networks:
+      - synergy-network
+
+  # Governance Service
+  governance:
+    build:
+      context: ./services/governance
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    env_file:
+      - ./backend/.env
+    networks:
+      - synergy-network
+    volumes:
+      - ./libs:/app/libs:ro
+
+  # Decision Engine Service
+  decision-engine:
+    build:
+      context: ./services/decision-engine
+      dockerfile: Dockerfile
+    ports:
+      - "8002:8002"
+    env_file:
+      - ./backend/.env
+    networks:
+      - synergy-network
+    volumes:
+      - ./libs:/app/libs:ro
+
+  # Message Intake Service
+  message-intake:
+    build:
+      context: ./services/message-intake
+      dockerfile: Dockerfile
+    ports:
+      - "8003:8003"
+    env_file:
+      - ./backend/.env
+    environment:
+      - DECISION_ENGINE_URL=http://decision-engine:8002
+      - GOVERNANCE_URL=http://governance:8001
+    depends_on:
+      - decision-engine
+      - governance
+    networks:
+      - synergy-network
+    volumes:
+      - ./libs:/app/libs:ro
+
+networks:
+  synergy-network:
+    driver: bridge
+
+
