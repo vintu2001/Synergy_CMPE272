@@ -1,7 +1,3 @@
-"""
-Database Service - DynamoDB Integration
-Provides CRUD operations for resident requests stored in DynamoDB.
-"""
 import boto3
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
