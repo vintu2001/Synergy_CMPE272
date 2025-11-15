@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { getAllRequests, resolveRequest } from "../services/api";
 import LoadingSpinner from "../components/LoadingSpinner";
 import StatusBadge from "../components/StatusBadge";
-import { Shield, Search, Filter, RefreshCw, Eye, EyeOff, Key, ChevronDown, ChevronRight, DollarSign, Clock, Heart, AlertTriangle, UserX } from "lucide-react";
+import { Shield, Search, Filter, RefreshCw, Eye, EyeOff, Key, ChevronDown, ChevronRight, DollarSign, Clock, Heart, AlertTriangle, UserX, CheckCircle2 } from "lucide-react";
 
 export default function AdminDashboard() {
   const [apiKey, setApiKey] = useState(localStorage.getItem("admin_api_key") || "");

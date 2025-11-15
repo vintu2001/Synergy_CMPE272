@@ -131,7 +131,7 @@ class LLMClient:
                 prompt,
                 generation_config=genai.GenerationConfig(
                     temperature=0.6,
-                    max_output_tokens=4096  # Increased significantly to avoid truncation
+                    max_output_tokens=4096  # Optimized for faster responses
                 )
             )
             
@@ -293,21 +293,27 @@ INSTRUCTIONS:
    - time_to_resolution (number: hours)
    - resident_satisfaction_impact (number: 0.0 to 1.0, where 1.0 = very satisfied)
    - reasoning (string: brief explanation)
-   - steps (array of 3-5 strings: brief action steps that will be taken)
+   - steps (array of 3-5 strings: specific implementation steps explaining HOW to resolve the issue, not WHAT will happen)
 
 3. For resident_satisfaction_impact, consider:
    - Faster resolution = higher satisfaction (e.g., 2h = 0.9, 24h = 0.7, 48h = 0.6)
    - Lower cost = higher satisfaction
    - Less inconvenience = higher satisfaction
 
-4. For steps, provide 3-5 brief bullet points of what will happen (e.g., ["Contact HVAC vendor", "Technician dispatched", "System repaired and tested"])
+4. For steps, provide 3-5 brief bullet points of what will happen (e.g., ["Identify faulty HVAC component through diagnostic", "Source replacement part from inventory", "Install new component and recalibrate system", "Test cooling output for 30 minutes"])
 
 RETURN ONLY THIS JSON (no markdown, no ```):
 [
   {{"option_id":"opt_1","action":"...","estimated_cost":300,"time_to_resolution":2,"resident_satisfaction_impact":0.85,"reasoning":"...","steps":["Step 1","Step 2","Step 3"]}},
   {{"option_id":"opt_2","action":"...","estimated_cost":150,"time_to_resolution":24,"resident_satisfaction_impact":0.75,"reasoning":"...","steps":["Step 1","Step 2","Step 3"]}},
   {{"option_id":"opt_3","action":"...","estimated_cost":50,"time_to_resolution":48,"resident_satisfaction_impact":0.65,"reasoning":"...","steps":["Step 1","Step 2","Step 3"]}}
-]"""
+]
+
+5. For steps, focus on IMPLEMENTATION (HOW), not events (WHAT):
+   - BAD: "Technician will arrive", "Issue will be fixed"
+   - GOOD: "Run diagnostic scan on AC unit", "Replace refrigerant if low", "Clean air filters"
+
+"""
         
         return prompt
     

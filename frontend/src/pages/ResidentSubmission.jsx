@@ -418,96 +418,109 @@ export default function ResidentSubmission() {
               </div>
 
               <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4 items-start">
-                {submittedResult.simulation.options.map((option) => (
-                  <div
-                    key={option.option_id}
-                    className="flex flex-col rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm transition hover:border-slate-400 hover:shadow-md dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-500"
-                  >
-                    <div className="flex-grow space-y-2">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                        Option {option.option_id}
-                      </p>
-                      <h4 className="text-base font-semibold text-slate-800 dark:text-slate-100">{option.action}</h4>
-                      <div className="space-y-1 text-sm text-slate-600 dark:text-slate-300">
-                        <p className="flex justify-between"><span>Estimated cost</span><span>${parseFloat(option.estimated_cost || 0).toFixed(2)}</span></p>
-                        <p className="flex justify-between"><span>Resolution time</span><span>{parseFloat(option.estimated_time || option.time_to_resolution || 0).toFixed(1)}h</span></p>
-                        <p className="flex justify-between"><span>Satisfaction</span><span>{Math.round((option.resident_satisfaction_impact || 0) * 100)}%</span></p>
+                {submittedResult.simulation.options.map((option) => {
+                  const isRecommended = option.option_id === submittedResult.simulation.recommended_option_id;
+                  return (
+                    <div
+                      key={option.option_id}
+                      className={`flex flex-col rounded-xl border p-4 shadow-sm transition hover:border-slate-400 hover:shadow-md dark:hover:border-slate-500 ${
+                        isRecommended
+                          ? 'border-emerald-500 ring-2 ring-emerald-300 dark:border-emerald-400 dark:ring-emerald-700 bg-emerald-50/40 dark:bg-emerald-900/30'
+                          : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-950'
+                      }`}
+                      aria-label={isRecommended ? 'AI Recommended Option' : undefined}
+                    >
+                      <div className="flex-grow space-y-2">
+                        <div className="flex items-center gap-2">
+                          {/* Removed Option opt label */}
+                          {isRecommended && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-200" title="AI Recommended Option">
+                              <Star className="h-3 w-3 mr-1 text-emerald-500" /> Recommended
+                            </span>
+                          )}
+                        </div>
+                        <h4 className="text-base font-semibold text-slate-800 dark:text-slate-100">{option.action}</h4>
+                        <div className="space-y-1 text-sm text-slate-600 dark:text-slate-300">
+                          <p className="flex justify-between"><span>Estimated cost</span><span>${parseFloat(option.estimated_cost || 0).toFixed(2)}</span></p>
+                          <p className="flex justify-between"><span>Resolution time</span><span>{parseFloat(option.estimated_time || option.time_to_resolution || 0).toFixed(1)}h</span></p>
+                          <p className="flex justify-between"><span>Satisfaction</span><span>{Math.round((option.resident_satisfaction_impact || 0) * 100)}%</span></p>
+                        </div>
                       </div>
-                    </div>
-                    
-                    {/* Details Dropdown with smooth animation */}
-                    <div className={`overflow-hidden transition-all duration-300 ease-in-out ${
-                      expandedOptions.has(option.option_id) ? 'max-h-[500px] opacity-100 mt-3' : 'max-h-0 opacity-0'
-                    }`}>
-                      <div className="rounded-lg bg-white p-3 shadow-inner dark:bg-slate-900">
-                        <p className="mb-2 text-xs font-semibold text-slate-700 dark:text-slate-300">What happens with this option:</p>
-                        <div className="space-y-3 text-xs text-slate-600 dark:text-slate-400">
-                          {/* Action steps - use LLM-generated steps if available, otherwise parse */}
-                          <div>
-                            <ul className="space-y-2">
-                              {(option.steps && option.steps.length > 0 
-                                ? option.steps 
-                                : parseActionSteps(option.action, option.reasoning)
-                              ).map((step, idx) => (
-                                <li key={idx} className="flex items-start gap-2">
-                                  <span className="flex-shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 text-xs font-semibold">
-                                    {idx + 1}
-                                  </span>
-                                  <span className="flex-1 pt-0.5">{step}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                          
-                          {/* Source documents */}
-                          {option.source_doc_ids && option.source_doc_ids.length > 0 && (
-                            <div className="pt-2 border-t border-slate-200 dark:border-slate-700">
-                              <div className="flex items-start gap-2">
-                                <Info className="mt-0.5 h-3 w-3 flex-shrink-0 text-blue-500" />
-                                <div className="flex-1">
-                                  <p className="font-semibold text-slate-700 dark:text-slate-300 mb-1">Based on policies:</p>
-                                  <div className="flex flex-wrap gap-1">
-                                    {[...new Set(option.source_doc_ids)].map((docId, idx) => (
-                                      <span key={idx} className="inline-block px-2 py-0.5 rounded text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-200 font-mono">
-                                        {docId}
-                                      </span>
-                                    ))}
+                      
+                      {/* Details Dropdown with smooth animation */}
+                      <div className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                        expandedOptions.has(option.option_id) ? 'max-h-[500px] opacity-100 mt-3' : 'max-h-0 opacity-0'
+                      }`}>
+                        <div className="rounded-lg bg-white p-3 shadow-inner dark:bg-slate-900">
+                          <p className="mb-2 text-xs font-semibold text-slate-700 dark:text-slate-300">What happens with this option:</p>
+                          <div className="space-y-3 text-xs text-slate-600 dark:text-slate-400">
+                            {/* Action steps - use LLM-generated steps if available, otherwise parse */}
+                            <div>
+                              <ul className="space-y-2">
+                                {(option.steps && option.steps.length > 0 
+                                  ? option.steps 
+                                  : parseActionSteps(option.action, option.reasoning)
+                                ).map((step, idx) => (
+                                  <li key={idx} className="flex items-start gap-2">
+                                    <span className="flex-shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 text-xs font-semibold">
+                                      {idx + 1}
+                                    </span>
+                                    <span className="flex-1 pt-0.5">{step}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                            
+                            {/* Source documents */}
+                            {option.source_doc_ids && option.source_doc_ids.length > 0 && (
+                              <div className="pt-2 border-t border-slate-200 dark:border-slate-700">
+                                <div className="flex items-start gap-2">
+                                  <Info className="mt-0.5 h-3 w-3 flex-shrink-0 text-blue-500" />
+                                  <div className="flex-1">
+                                    <p className="font-semibold text-slate-700 dark:text-slate-300 mb-1">Based on policies:</p>
+                                    <div className="flex flex-wrap gap-1">
+                                      {[...new Set(option.source_doc_ids)].map((docId, idx) => (
+                                        <span key={idx} className="inline-block px-2 py-0.5 rounded text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-200 font-mono">
+                                          {docId}
+                                        </span>
+                                      ))}
+                                    </div>
                                   </div>
                                 </div>
                               </div>
-                            </div>
-                          )}
+                            )}
+                          </div>
                         </div>
                       </div>
+                      
+                      <div className="mt-4 space-y-2 flex-shrink-0">
+                        <button
+                          onClick={() => toggleOptionDetails(option.option_id)}
+                          className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                        >
+                          {expandedOptions.has(option.option_id) ? (
+                            <>
+                              <ChevronUp className="h-4 w-4" />
+                              Hide Details
+                            </>
+                          ) : (
+                            <>
+                              <ChevronDown className="h-4 w-4" />
+                              Show Details
+                            </>
+                          )}
+                        </button>
+                        <button
+                          onClick={() => handleSelectOption(option.option_id)}
+                          disabled={selectingOption}
+                          className="w-full inline-flex items-center justify-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
+                        >
+                          {selectingOption ? "Processing..." : "Choose this option"}
+                        </button>
+                      </div>
                     </div>
-                    
-                    <div className="mt-4 space-y-2 flex-shrink-0">
-                      <button
-                        onClick={() => toggleOptionDetails(option.option_id)}
-                        className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-                      >
-                        {expandedOptions.has(option.option_id) ? (
-                          <>
-                            <ChevronUp className="h-4 w-4" />
-                            Hide Details
-                          </>
-                        ) : (
-                          <>
-                            <ChevronDown className="h-4 w-4" />
-                            Show Details
-                          </>
-                        )}
-                      </button>
-                      <button
-                        onClick={() => handleSelectOption(option.option_id)}
-                        disabled={selectingOption}
-                        className="w-full inline-flex items-center justify-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
-                      >
-                        {selectingOption ? "Processing..." : "Choose this option"}
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
 
                 <div className="flex flex-col rounded-xl border border-rose-200 bg-rose-50 p-4 shadow-sm transition hover:border-rose-300 hover:shadow-md dark:border-rose-800 dark:bg-rose-950/30 dark:hover:border-rose-600">
                   <div className="flex-grow space-y-2">
