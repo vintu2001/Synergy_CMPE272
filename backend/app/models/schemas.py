@@ -66,6 +66,10 @@ class SimulatedOption(BaseModel):
     estimated_time: float = Field(..., ge=0, description="Estimated time to resolution in hours")
     reasoning: str = Field(..., description="Explanation for why this option was simulated")
     source_doc_ids: Optional[List[str]] = Field(None, description="KB document IDs used to generate this option (RAG Phase 1)")
+    resident_satisfaction_impact: Optional[float] = Field(None, ge=0.0, le=1.0, description="Estimated resident satisfaction (0-1)")
+    steps: Optional[List[str]] = Field(None, description="Brief action steps (3-5 steps) that will be taken")
+    
+    model_config = {"exclude_none": False}  # Always include all fields even if None
 
 
 class SimulationResponse(BaseModel):

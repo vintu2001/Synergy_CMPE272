@@ -223,13 +223,28 @@ class AgenticResolutionSimulator:
                     'cost': f"${float(llm_option['estimated_cost']):.2f}"
                 }]
                 
+                # Get satisfaction from LLM response
+                llm_satisfaction = llm_option.get('resident_satisfaction_impact')
+                if llm_satisfaction is None:
+                    logger.warning(f"LLM did not provide resident_satisfaction_impact for {llm_option['option_id']}. Raw option: {llm_option}")
+                    llm_satisfaction = 0.75  # Fallback only if LLM doesn't provide it
+                
+                # Get steps from LLM response
+                llm_steps = llm_option.get('steps')
+                if llm_steps and isinstance(llm_steps, list):
+                    steps = llm_steps[:5]  # Limit to 5 steps
+                else:
+                    steps = None
+                
                 option = SimulatedOption(
                     option_id=llm_option['option_id'],
                     action=llm_option['action'],
                     estimated_cost=float(llm_option['estimated_cost']),
                     estimated_time=float(llm_option.get('time_to_resolution', llm_option.get('estimated_time', 1.0))),
                     reasoning=llm_option.get('reasoning', llm_option.get('action', 'Automated resolution option')),
-                    source_doc_ids=source_doc_ids if source_doc_ids else None  # RAG sources
+                    source_doc_ids=source_doc_ids if source_doc_ids else None,  # RAG sources
+                    resident_satisfaction_impact=float(llm_satisfaction),
+                    steps=steps
                 )
                 options.append(option)
             
@@ -238,10 +253,11 @@ class AgenticResolutionSimulator:
                 escalation_option = SimulatedOption(
                     option_id=f"OPT_ESCALATE_{len(options) + 1}",
                     action=f"Escalate to Human Administrator - No policy documentation found for this {category.value} issue. A human administrator should review this request to ensure proper handling according to building procedures.",
-                    estimated_cost=0.0,
-                    estimated_time=0.5,  # 30 minutes for admin review
+                    estimated_cost=75.0,  
+                    estimated_time=1.5,  
                     reasoning="No relevant policy documents found in knowledge base. Human review required for proper handling.",
-                    source_doc_ids=None  # No KB sources available
+                    source_doc_ids=None,  # No KB sources available
+                    resident_satisfaction_impact=0.85  # Human attention generally high satisfaction
                 )
                 options.append(escalation_option)
                 logger.info(f"Added human escalation option due to missing RAG context (total options: {len(options)})")

@@ -74,8 +74,8 @@ class LLMClient:
     """Client for interacting with Gemini LLM for agentic decision-making."""
     
     def __init__(self):
-        # Using gemini-2.5-flash for faster, cost-effective generation
-        # Flash model is optimized for speed while maintaining good quality
+        # Using gemini-2.5-flash for faster generation
+        # Note: If this model is not available, it will fall back to available models
         self.model = genai.GenerativeModel('gemini-2.5-flash') if GEMINI_API_KEY else None
         self.enabled = GEMINI_API_KEY is not None
     
@@ -130,26 +130,38 @@ class LLMClient:
             response = self.model.generate_content(
                 prompt,
                 generation_config=genai.GenerationConfig(
-                    response_mime_type="application/json",
                     temperature=0.6,
-                    max_output_tokens=2048  # Increased to avoid truncation
+                    max_output_tokens=4096  # Increased significantly to avoid truncation
                 )
             )
             
             # Check finish reason
             if response.candidates:
                 finish_reason = response.candidates[0].finish_reason
-                if finish_reason == 2:  # MAX_TOKENS
-                    raise ValueError("Response was truncated due to token limit")
-                elif finish_reason == 3:  # SAFETY
+                logger.info(f"LLM finish reason: {finish_reason}")
+                if finish_reason == 3:  # SAFETY
                     raise ValueError("Response blocked by safety filters")
                 elif finish_reason == 4:  # RECITATION
                     raise ValueError("Response blocked due to recitation")
+                # Note: finish_reason == 2 (MAX_TOKENS) is handled below - we'll try to parse anyway
             
             if not response or not response.text:
+                logger.error(f"Empty response from LLM. Response: {response}")
                 raise ValueError("Empty response from LLM")
             
-            result = json.loads(response.text)
+            logger.info(f"Raw LLM response text (first 500 chars): {response.text[:500]}")
+            
+            # Try to extract JSON from response if it's wrapped in markdown code blocks
+            response_text = response.text.strip()
+            if response_text.startswith('```json'):
+                response_text = response_text[7:]  # Remove ```json
+            if response_text.startswith('```'):
+                response_text = response_text[3:]  # Remove ```
+            if response_text.endswith('```'):
+                response_text = response_text[:-3]  # Remove trailing ```
+            response_text = response_text.strip()
+            
+            result = json.loads(response_text)
             
             # Handle both formats: {"options": [...]} and [...]
             if isinstance(result, list):
@@ -169,13 +181,14 @@ class LLMClient:
             
             # Validate each option
             for idx, option in enumerate(options):
-                required_fields = ['option_id', 'action', 'estimated_cost']
+                required_fields = ['option_id', 'action', 'estimated_cost', 'resident_satisfaction_impact']
                 # Check for either new field names or old field names for backward compatibility
                 if 'estimated_time' not in option and 'time_to_resolution' not in option:
                     raise ValueError(f"Option {idx+1} missing time field (estimated_time or time_to_resolution)")
                 
                 for field in required_fields:
                     if field not in option:
+                        logger.error(f"Option {idx+1} missing required field: {field}. Full option: {option}")
                         raise ValueError(f"Option {idx+1} missing required field: {field}")
             
             logger.info(f"Successfully generated {len(options)} options for {resident_id}")
@@ -264,18 +277,37 @@ class LLMClient:
                 rag_section += f"{i}. [{doc_id}] {text_preview}...\n"
             rag_section += "\nUse these KB documents to inform your options. Cite doc IDs when relevant.\n"
         
-        prompt = f"""Generate 3 resolution options for: "{message_text}"
-Category: {category}, Urgency: {urgency}
-{rag_section}
-Return JSON with 3 options (fast/standard/budget):
-- option_id: "opt_1", "opt_2", "opt_3"
-- action: brief description (max 2 sentences)
-- estimated_cost: number
-- time_to_resolution: hours (number)
-- resident_satisfaction_impact: 0-1 (number)
-- reasoning: brief reason (max 1 sentence)
+        prompt = f"""You are generating resolution options for an apartment maintenance request.
 
-Keep action and reasoning SHORT."""
+REQUEST: "{message_text}"
+CATEGORY: {category}
+URGENCY: {urgency}
+{rag_section}
+
+INSTRUCTIONS:
+1. Generate exactly 3 resolution options (fast, standard, budget-friendly)
+2. MANDATORY: Include ALL these fields for EACH option:
+   - option_id (string: "opt_1", "opt_2", "opt_3")
+   - action (string: brief description)
+   - estimated_cost (number: dollars)
+   - time_to_resolution (number: hours)
+   - resident_satisfaction_impact (number: 0.0 to 1.0, where 1.0 = very satisfied)
+   - reasoning (string: brief explanation)
+   - steps (array of 3-5 strings: brief action steps that will be taken)
+
+3. For resident_satisfaction_impact, consider:
+   - Faster resolution = higher satisfaction (e.g., 2h = 0.9, 24h = 0.7, 48h = 0.6)
+   - Lower cost = higher satisfaction
+   - Less inconvenience = higher satisfaction
+
+4. For steps, provide 3-5 brief bullet points of what will happen (e.g., ["Contact HVAC vendor", "Technician dispatched", "System repaired and tested"])
+
+RETURN ONLY THIS JSON (no markdown, no ```):
+[
+  {{"option_id":"opt_1","action":"...","estimated_cost":300,"time_to_resolution":2,"resident_satisfaction_impact":0.85,"reasoning":"...","steps":["Step 1","Step 2","Step 3"]}},
+  {{"option_id":"opt_2","action":"...","estimated_cost":150,"time_to_resolution":24,"resident_satisfaction_impact":0.75,"reasoning":"...","steps":["Step 1","Step 2","Step 3"]}},
+  {{"option_id":"opt_3","action":"...","estimated_cost":50,"time_to_resolution":48,"resident_satisfaction_impact":0.65,"reasoning":"...","steps":["Step 1","Step 2","Step 3"]}}
+]"""
         
         return prompt
     
@@ -489,7 +521,7 @@ Output JSON:
             response = self.model.generate_content(
                 prompt,
                 generation_config=genai.GenerationConfig(
-                    response_mime_type="application/json"
+                    temperature=0.6
                 )
             )
             

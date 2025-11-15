@@ -78,7 +78,7 @@ Be conservative - most issues are simple."""
             
             response = self.llm_client.model.generate_content(
                 prompt,
-                generation_config=genai.GenerationConfig(response_mime_type='application/json')
+                generation_config=genai.GenerationConfig(temperature=0.6)
             )
             
             result = json.loads(response.text)
@@ -133,7 +133,7 @@ Keep it concise."""
             
             response = self.llm_client.model.generate_content(
                 prompt,
-                generation_config=genai.GenerationConfig(response_mime_type='application/json')
+                generation_config=genai.GenerationConfig(temperature=0.6)
             )
             
             result = json.loads(response.text)

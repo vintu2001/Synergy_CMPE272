@@ -21,6 +21,25 @@ logger = logging.getLogger(__name__)
 log_level = os.getenv("RAG_LOG_LEVEL", "INFO")
 logger.setLevel(getattr(logging, log_level))
 
+# Version marker to track code reloads
+RETRIEVER_VERSION = "v2.0-with-query-expansion"
+logger.info(f"RAG Retriever module loaded - {RETRIEVER_VERSION}")
+
+
+# Query expansion dictionary for common abbreviations and synonyms
+QUERY_EXPANSIONS = {
+    "ac": ["air conditioning", "HVAC", "cooling system", "climate control"],
+    "hvac": ["heating ventilation air conditioning", "climate control", "AC"],
+    "fridge": ["refrigerator", "cooling appliance"],
+    "dishwasher": ["dish washer", "dishwashing machine"],
+    "washer": ["washing machine", "laundry machine"],
+    "dryer": ["drying machine", "laundry dryer"],
+    "hot water": ["water heater", "hot water heater"],
+    "leak": ["leaking", "water leak", "drip", "dripping"],
+    "broken": ["not working", "malfunction", "failure", "damaged"],
+    "noisy": ["loud", "noise", "making noise"],
+}
+
 
 class RAGRetriever:
     """
@@ -44,6 +63,8 @@ class RAGRetriever:
     
     def __init__(self):
         """Initialize the RAG retriever with embedding model and vector store."""
+        logger.info(f"🔄 Initializing RAGRetriever {RETRIEVER_VERSION}")
+        
         # Load configuration from environment
         self.enabled = os.getenv("RAG_ENABLED", "false").lower() == "true"
         self.top_k = int(os.getenv("RAG_TOP_K", "5"))
@@ -90,6 +111,33 @@ class RAGRetriever:
             self.collection is not None
         )
     
+    def expand_query(self, query: str) -> str:
+        """
+        Expand query with synonyms and related terms to improve retrieval.
+        
+        Args:
+            query: Original query string
+        
+        Returns:
+            Expanded query with synonyms
+        """
+        query_lower = query.lower()
+        expanded_terms = [query]  # Always include original query
+        
+        # Check for expansions
+        for abbrev, expansions in QUERY_EXPANSIONS.items():
+            if abbrev in query_lower:
+                expanded_terms.extend(expansions)
+                logger.info(f"✨ Expanded '{abbrev}' with {expansions}")
+        
+        expanded_query = " ".join(expanded_terms)
+        if expanded_query != query:
+            logger.info(f"📝 Query expanded: '{query}' → '{expanded_query}'")
+        else:
+            logger.info(f"📝 Query unchanged: '{query}'")
+        
+        return expanded_query
+    
     async def retrieve_relevant_docs(
         self,
         query: str,
@@ -118,7 +166,10 @@ class RAGRetriever:
         """
         if not self.is_available():
             logger.warning("RAG retriever not available, skipping retrieval")
+            logger.warning(f"RAG enabled: {self.enabled}, embedding_model: {self.embedding_model is not None}, collection: {self.collection is not None}")
             return None
+        
+        logger.info(f"RAG retrieval starting: query='{query[:50]}...', category={category}, building_id={building_id}")
         
         # Use provided values or defaults
         k = top_k if top_k is not None else self.top_k
@@ -126,11 +177,17 @@ class RAGRetriever:
         
         # Default to retrieving policies, SOPs, and catalogs for simulation
         if doc_types is None:
-            doc_types = ["policy", "sop", "catalog"]
+            doc_types = ["policy", "sop", "catalog", "sla"]  # Include SLAs for maintenance queries
+        
+        logger.info(f"RAG retrieval params: top_k={k}, threshold={threshold}, doc_types={doc_types}")
         
         try:
+            # Expand query with synonyms for better matching
+            expanded_query = self.expand_query(query)
+            
             # Generate query embedding
-            query_embedding = self.embedding_model.encode(query).tolist()
+            query_embedding = self.embedding_model.encode(expanded_query).tolist()
+            logger.info(f"Generated query embedding with {len(query_embedding)} dimensions")
             
             # Build metadata filters
             filters = self._build_filters(
@@ -138,6 +195,8 @@ class RAGRetriever:
                 doc_types=doc_types,
                 category=category
             )
+            
+            logger.info(f"RAG filters: {filters}")
             
             # Query vector store
             results = self.collection.query(
@@ -147,11 +206,15 @@ class RAGRetriever:
                 include=["documents", "metadatas", "distances"]
             )
             
+            logger.info(f"RAG query returned {len(results['ids'][0]) if results['ids'] else 0} results")
+            
             # Process results
             retrieved_docs = self._process_results(
                 results=results,
                 similarity_threshold=threshold
             )
+            
+            logger.info(f"After filtering by threshold {threshold}, {len(retrieved_docs)} documents remain")
             
             # Create retrieval context
             context = RetrievalContext(
@@ -285,10 +348,15 @@ class RAGRetriever:
         filter_conditions = []
         
         # Building filter with global fallback
+        # If no building_id provided, include global documents only
         if building_id:
             filter_conditions.append({
                 "building_id": {"$in": [building_id, "all_buildings"]}
             })
+        else:
+            # No building_id: retrieve global/general documents
+            logger.info("No building_id provided, retrieving global documents")
+            # Don't add building filter - will retrieve all buildings
         
         # Document type filter
         if doc_types:
@@ -296,11 +364,14 @@ class RAGRetriever:
                 "type": {"$in": doc_types}
             })
         
-        # Category filter
+        # Category filter - be flexible with matching
+        # For now, don't filter by category since documents use specific subcategories
+        # like "maintenance_request", "maintenance_vendors" vs just "maintenance"
+        # The semantic search will handle relevance
         if category:
-            filter_conditions.append({
-                "category": {"$eq": category.lower()}
-            })
+            logger.info(f"Category '{category}' provided - relying on semantic search for relevance")
+            # Note: Could map categories to subcategories if needed in future
+            # For now, semantic search handles this better than strict filtering
         
         # Combine filters with AND logic
         if len(filter_conditions) == 0:
@@ -336,8 +407,12 @@ class RAGRetriever:
             # Convert distance to similarity score (cosine distance → similarity)
             similarity_score = 1.0 - distance
             
+            # Log similarity scores for debugging
+            logger.info(f"Document {metadata.get('doc_id', 'unknown')}: similarity={similarity_score:.4f}, category={metadata.get('category', 'unknown')}, type={metadata.get('type', 'unknown')}")
+            
             # Filter by threshold
             if similarity_score < similarity_threshold:
+                logger.debug(f"Filtered out document {metadata.get('doc_id', 'unknown')} with score {similarity_score:.4f} < threshold {similarity_threshold}")
                 continue
             
             # Build document dictionary
@@ -409,6 +484,12 @@ class RAGRetriever:
 
 # Global retriever instance
 _retriever_instance: Optional[RAGRetriever] = None
+
+
+def reset_retriever():
+    """Reset the global RAGRetriever instance (for testing/reinitialization)."""
+    global _retriever_instance
+    _retriever_instance = None
 
 
 def get_retriever() -> RAGRetriever:

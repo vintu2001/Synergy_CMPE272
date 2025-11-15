@@ -120,7 +120,9 @@ async def submit_request(request: MessageRequest):
                     "estimated_cost": opt.estimated_cost,
                     "estimated_time": opt.estimated_time,
                     "reasoning": opt.reasoning,
-                    "source_doc_ids": opt.source_doc_ids
+                    "source_doc_ids": opt.source_doc_ids,
+                    "resident_satisfaction_impact": opt.resident_satisfaction_impact,
+                    "steps": opt.steps
                 }
                 for opt in simulation_options
             ]

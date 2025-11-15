@@ -42,10 +42,78 @@ export default function ResidentSubmission() {
   const [selectingOption, setSelectingOption] = useState(false);
   const debounceRef = useRef(null);
   
-  // NEW: State for option selection flow
-  const [expandedOptionId, setExpandedOptionId] = useState(null); // Track which option's details are expanded
+  // NEW: State for option selection flow - allow multiple options to be expanded
+  const [expandedOptions, setExpandedOptions] = useState(new Set()); // Track which options' details are expanded
 
   const charCount = useMemo(() => messageText.length || 0, [messageText]);
+  
+  // Toggle function for expanding/collapsing option details
+  const toggleOptionDetails = (optionId) => {
+    setExpandedOptions(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(optionId)) {
+        newSet.delete(optionId);
+      } else {
+        newSet.add(optionId);
+      }
+      return newSet;
+    });
+  };
+  
+  // Parse action text into steps for display
+  const parseActionSteps = (action, reasoning) => {
+    const steps = [];
+    
+    // Try to extract steps from action text
+    const text = action + ' ' + reasoning;
+    
+    // Look for numbered steps or sequential actions
+    const numberedSteps = text.match(/\d+[.)]\s*[^.]+\./g);
+    if (numberedSteps && numberedSteps.length > 0) {
+      return numberedSteps.map(s => s.replace(/^\d+[.)]\s*/, '').trim());
+    }
+    
+    // Look for "first", "then", "finally" patterns
+    const sequentialPattern = /(first|then|next|after|finally)[,:]?\s*([^.]+)/gi;
+    let match;
+    while ((match = sequentialPattern.exec(text)) !== null) {
+      steps.push(match[2].trim());
+    }
+    if (steps.length > 0) return steps;
+    
+    // Look for action keywords
+    const actionKeywords = ['contact', 'dispatch', 'schedule', 'send', 'perform', 'check', 'repair', 'replace', 'inspect'];
+    const sentences = text.split(/[.;]/).filter(s => s.trim());
+    
+    for (const sentence of sentences) {
+      const lowerSentence = sentence.toLowerCase();
+      if (actionKeywords.some(keyword => lowerSentence.includes(keyword))) {
+        const cleaned = sentence.trim();
+        if (cleaned.length > 10) {
+          steps.push(cleaned);
+        }
+      }
+    }
+    
+    // If we still have no steps, create basic steps from the action
+    if (steps.length === 0) {
+      if (action.toLowerCase().includes('emergency') || action.toLowerCase().includes('immediate')) {
+        steps.push('Emergency service dispatch initiated');
+        steps.push('Technician assigned for immediate response');
+        steps.push('Issue resolution and verification');
+      } else if (action.toLowerCase().includes('schedule')) {
+        steps.push('Service appointment scheduled');
+        steps.push('Technician visits and diagnoses issue');
+        steps.push('Repair completed and tested');
+      } else {
+        steps.push('Initial assessment of the issue');
+        steps.push('Appropriate action taken');
+        steps.push('Follow-up to ensure resolution');
+      }
+    }
+    
+    return steps.slice(0, 5); // Limit to 5 steps max
+  };
 
   useEffect(() => {
     if (!residentId) {
@@ -349,35 +417,100 @@ export default function ResidentSubmission() {
                 </div>
               </div>
 
-              <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4 items-start">
                 {submittedResult.simulation.options.map((option) => (
                   <div
                     key={option.option_id}
-                    className="flex h-full flex-col justify-between rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm transition hover:border-slate-400 hover:shadow-md dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-500"
+                    className="flex flex-col rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm transition hover:border-slate-400 hover:shadow-md dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-500"
                   >
-                    <div className="space-y-2">
+                    <div className="flex-grow space-y-2">
                       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                         Option {option.option_id}
                       </p>
                       <h4 className="text-base font-semibold text-slate-800 dark:text-slate-100">{option.action}</h4>
                       <div className="space-y-1 text-sm text-slate-600 dark:text-slate-300">
                         <p className="flex justify-between"><span>Estimated cost</span><span>${parseFloat(option.estimated_cost || 0).toFixed(2)}</span></p>
-                        <p className="flex justify-between"><span>Resolution time</span><span>{parseFloat(option.time_to_resolution || 0).toFixed(1)}h</span></p>
+                        <p className="flex justify-between"><span>Resolution time</span><span>{parseFloat(option.estimated_time || option.time_to_resolution || 0).toFixed(1)}h</span></p>
                         <p className="flex justify-between"><span>Satisfaction</span><span>{Math.round((option.resident_satisfaction_impact || 0) * 100)}%</span></p>
                       </div>
                     </div>
-                    <button
-                      onClick={() => handleSelectOption(option.option_id)}
-                      disabled={selectingOption}
-                      className="mt-4 inline-flex items-center justify-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
-                    >
-                      {selectingOption ? "Processing..." : "Choose this option"}
-                    </button>
+                    
+                    {/* Details Dropdown with smooth animation */}
+                    <div className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                      expandedOptions.has(option.option_id) ? 'max-h-[500px] opacity-100 mt-3' : 'max-h-0 opacity-0'
+                    }`}>
+                      <div className="rounded-lg bg-white p-3 shadow-inner dark:bg-slate-900">
+                        <p className="mb-2 text-xs font-semibold text-slate-700 dark:text-slate-300">What happens with this option:</p>
+                        <div className="space-y-3 text-xs text-slate-600 dark:text-slate-400">
+                          {/* Action steps - use LLM-generated steps if available, otherwise parse */}
+                          <div>
+                            <ul className="space-y-2">
+                              {(option.steps && option.steps.length > 0 
+                                ? option.steps 
+                                : parseActionSteps(option.action, option.reasoning)
+                              ).map((step, idx) => (
+                                <li key={idx} className="flex items-start gap-2">
+                                  <span className="flex-shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 text-xs font-semibold">
+                                    {idx + 1}
+                                  </span>
+                                  <span className="flex-1 pt-0.5">{step}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                          
+                          {/* Source documents */}
+                          {option.source_doc_ids && option.source_doc_ids.length > 0 && (
+                            <div className="pt-2 border-t border-slate-200 dark:border-slate-700">
+                              <div className="flex items-start gap-2">
+                                <Info className="mt-0.5 h-3 w-3 flex-shrink-0 text-blue-500" />
+                                <div className="flex-1">
+                                  <p className="font-semibold text-slate-700 dark:text-slate-300 mb-1">Based on policies:</p>
+                                  <div className="flex flex-wrap gap-1">
+                                    {[...new Set(option.source_doc_ids)].map((docId, idx) => (
+                                      <span key={idx} className="inline-block px-2 py-0.5 rounded text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-200 font-mono">
+                                        {docId}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="mt-4 space-y-2 flex-shrink-0">
+                      <button
+                        onClick={() => toggleOptionDetails(option.option_id)}
+                        className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                      >
+                        {expandedOptions.has(option.option_id) ? (
+                          <>
+                            <ChevronUp className="h-4 w-4" />
+                            Hide Details
+                          </>
+                        ) : (
+                          <>
+                            <ChevronDown className="h-4 w-4" />
+                            Show Details
+                          </>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => handleSelectOption(option.option_id)}
+                        disabled={selectingOption}
+                        className="w-full inline-flex items-center justify-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
+                      >
+                        {selectingOption ? "Processing..." : "Choose this option"}
+                      </button>
+                    </div>
                   </div>
                 ))}
 
-                <div className="flex h-full flex-col justify-between rounded-xl border border-rose-200 bg-rose-50 p-4 shadow-sm transition hover:border-rose-300 hover:shadow-md dark:border-rose-800 dark:bg-rose-950/30 dark:hover:border-rose-600">
-                  <div className="space-y-2">
+                <div className="flex flex-col rounded-xl border border-rose-200 bg-rose-50 p-4 shadow-sm transition hover:border-rose-300 hover:shadow-md dark:border-rose-800 dark:bg-rose-950/30 dark:hover:border-rose-600">
+                  <div className="flex-grow space-y-2">
                     <p className="text-xs font-semibold uppercase tracking-wide text-rose-500 dark:text-rose-300">Need a person?</p>
                     <h4 className="text-base font-semibold text-rose-600 dark:text-rose-200">Escalate to human support</h4>
                     <p className="text-sm text-rose-700 dark:text-rose-200/80">
@@ -387,7 +520,7 @@ export default function ResidentSubmission() {
                   <button
                     onClick={() => handleSelectOption("escalate_to_human")}
                     disabled={selectingOption}
-                    className="mt-4 inline-flex items-center justify-center gap-2 rounded-lg bg-rose-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-400 disabled:opacity-60 dark:bg-rose-400 dark:text-rose-950 dark:hover:bg-rose-300"
+                    className="mt-4 flex-shrink-0 inline-flex items-center justify-center gap-2 rounded-lg bg-rose-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-400 disabled:opacity-60 dark:bg-rose-400 dark:text-rose-950 dark:hover:bg-rose-300"
                   >
                     <UserX className="h-4 w-4" />
                     {selectingOption ? "Processing..." : "Escalate to human"}
