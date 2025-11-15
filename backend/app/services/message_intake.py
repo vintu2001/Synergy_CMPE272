@@ -64,7 +64,73 @@ async def submit_request(request: MessageRequest):
                 building_id = parts[1]
                 logger.info(f"Extracted building_id: {building_id} from resident_id: {request.resident_id}")
         
-        # Step 2: Risk Prediction
+        # SPECIAL HANDLING FOR QUESTIONS: Skip options generation, just answer directly
+        if classification.intent.value == "answer_a_question":
+            logger.info(f"Intent is answer_a_question - generating direct answer using RAG")
+            try:
+                from app.rag.retriever import answer_question
+                
+                # Use RAG to answer the question
+                answer_result = await answer_question(
+                    question=request.message_text,
+                    building_id=building_id,
+                    category=final_category.value
+                )
+                
+                request_id = generate_request_id()
+                now = datetime.now(timezone.utc)
+                
+                # Store minimal request in database
+                resident_request = ResidentRequest(
+                    request_id=request_id,
+                    resident_id=request.resident_id,
+                    message_text=request.message_text,
+                    category=final_category,
+                    urgency=final_urgency,
+                    intent=classification.intent,
+                    status=Status.RESOLVED,  # Questions are immediately resolved
+                    risk_forecast=None,
+                    classification_confidence=classification.confidence,
+                    simulated_options=None,
+                    created_at=now,
+                    updated_at=now,
+                    resolved_at=now,
+                    resolved_by="AI_Assistant"
+                )
+                
+                create_request(resident_request)
+                
+                return {
+                    "status": "answered",
+                    "message": "Question answered successfully!",
+                    "request_id": request_id,
+                    "classification": {
+                        "category": final_category.value,
+                        "urgency": final_urgency.value,
+                        "intent": classification.intent.value,
+                        "confidence": classification.confidence
+                    },
+                    "answer": {
+                        "text": answer_result.get("answer", "I don't have enough information to answer that question."),
+                        "sources": answer_result.get("source_docs", []),
+                        "confidence": answer_result.get("confidence", 0.5)
+                    }
+                }
+            except Exception as answer_error:
+                logger.error(f"Failed to answer question: {answer_error}")
+                # Fall back to regular flow if answering fails
+                return {
+                    "status": "error",
+                    "message": "I couldn't find a good answer to your question. Please rephrase or contact support.",
+                    "classification": {
+                        "category": final_category.value,
+                        "urgency": final_urgency.value,
+                        "intent": classification.intent.value,
+                        "confidence": classification.confidence
+                    }
+                }
+        
+        # Step 2: Risk Prediction (for solve_problem and human_escalation intents)
         risk_result = None
         risk_score = None
         try:

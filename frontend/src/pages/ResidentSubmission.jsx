@@ -166,6 +166,23 @@ export default function ResidentSubmission() {
       const urgency = watch("urgency") || analysis?.urgency;
       const result = await submitRequest(residentId, messageText, category, urgency);
       
+      // Check if this was a question that got answered
+      if (result.status === "answered") {
+        setToast({
+          message: "Your question has been answered!",
+          type: "success",
+        });
+        
+        // Show the answer in a nice format
+        setSubmittedResult({
+          ...result,
+          isQuestion: true
+        });
+        
+        // Don't auto-reset - let user read and manually clear if they want
+        return;
+      }
+      
       // Check if LLM generation failed
       if (result.status === "error") {
         setError(result.message);
@@ -356,7 +373,11 @@ export default function ResidentSubmission() {
 
                     <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
                       <span>Intent</span>
-                      <span>{analysis.intent === "solve_problem" ? "Solve problem" : "Human escalation"}</span>
+                      <span>
+                        {analysis.intent === "solve_problem" && "Solve problem"}
+                        {analysis.intent === "answer_a_question" && "Answer question"}
+                        {analysis.intent === "human_escalation" && "Human escalation"}
+                      </span>
                     </div>
 
                     <div className="space-y-1 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-950">
@@ -402,6 +423,65 @@ export default function ResidentSubmission() {
               )}
             </aside>
           </div>
+
+          {/* Display answer for questions */}
+          {submittedResult && submittedResult.isQuestion && submittedResult.answer && (
+            <div className="rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-6 shadow-lg dark:border-emerald-800 dark:from-emerald-950 dark:to-slate-900">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 rounded-full bg-emerald-100 p-2 dark:bg-emerald-900/40">
+                  <CheckCircle2 className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <div className="flex-1 space-y-3">
+                  <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+                    Here's your answer
+                  </h3>
+                  <div className="rounded-lg border border-emerald-200 bg-white p-4 dark:border-emerald-800 dark:bg-slate-950">
+                    <p className="text-slate-700 dark:text-slate-200 leading-relaxed">
+                      {submittedResult.answer.text}
+                    </p>
+                  </div>
+                  
+                  {/* Sources */}
+                  {submittedResult.answer.sources && submittedResult.answer.sources.length > 0 && (
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900/50">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Info className="h-4 w-4 text-blue-500" />
+                        <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                          Sources consulted:
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        {submittedResult.answer.sources.map((source, idx) => (
+                          <div key={idx} className="rounded border border-slate-200 bg-white p-2 dark:border-slate-700 dark:bg-slate-950">
+                            <p className="text-[10px] font-mono text-blue-600 dark:text-blue-400 mb-1">
+                              {source.doc_id}
+                            </p>
+                            <p className="text-xs text-slate-600 dark:text-slate-400">
+                              {source.text}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Confidence indicator */}
+                  <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                    <span>Confidence:</span>
+                    <div className="h-2 w-32 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+                      <div
+                        className="h-full rounded-full bg-emerald-500 transition-[width]"
+                        style={{ width: `${Math.round((submittedResult.answer.confidence || 0) * 100)}%` }}
+                      />
+                    </div>
+                    <span className="font-semibold text-slate-700 dark:text-slate-200">
+                      {Math.round((submittedResult.answer.confidence || 0) * 100)}%
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {submittedResult && submittedResult.simulation?.options && (
             <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">

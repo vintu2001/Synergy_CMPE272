@@ -21,6 +21,7 @@ class IssueCategory(str, Enum):
 class Intent(str, Enum):
     SOLVE_PROBLEM = "solve_problem"
     HUMAN_ESCALATION = "human_escalation"
+    ANSWER_QUESTION = "answer_a_question"
 
 
 class Status(str, Enum):

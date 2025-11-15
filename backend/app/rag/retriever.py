@@ -516,3 +516,88 @@ async def retrieve_decision_rules(*args, **kwargs) -> Optional[RetrievalContext]
     """Convenience wrapper for RAGRetriever.retrieve_decision_rules()"""
     retriever = get_retriever()
     return await retriever.retrieve_decision_rules(*args, **kwargs)
+
+
+async def answer_question(
+    question: str,
+    building_id: Optional[str] = None,
+    category: Optional[str] = None,
+    top_k: int = 3
+) -> Dict[str, Any]:
+    """
+    Answer a resident's question using RAG retrieval and LLM generation.
+    
+    Args:
+        question: The question to answer
+        building_id: Optional building ID for context-specific answers
+        category: Optional category for filtering relevant documents
+        top_k: Number of documents to retrieve
+    
+    Returns:
+        Dict with answer, sources, and confidence
+    """
+    logger.info(f"Answering question: '{question[:100]}...'")
+    
+    try:
+        # Retrieve relevant documents
+        retrieval_context = await retrieve_relevant_docs(
+            query=question,
+            building_id=building_id,
+            category=category,
+            top_k=top_k,
+            similarity_threshold=0.5  # Lower threshold for questions
+        )
+        
+        # Format context from retrieved documents
+        if retrieval_context and retrieval_context.retrieved_docs:
+            context_text = "\n\n".join([
+                f"[Source {i+1}]: {doc['text']}"
+                for i, doc in enumerate(retrieval_context.retrieved_docs)
+            ])
+        else:
+            context_text = None
+        
+        # Use llm_client to generate answer based on context
+        from app.utils.llm_client import llm_client
+        
+        if not llm_client.enabled:
+            logger.error("LLM client not enabled")
+            return {
+                "answer": "I'm unable to process your question right now. Please try again later or contact the property management office.",
+                "source_docs": [],
+                "confidence": 0.0
+            }
+        
+        # Generate answer using llm_client
+        answer_result = await llm_client.answer_question(
+            question=question,
+            rag_context=context_text
+        )
+        
+        # If no relevant docs found, return the LLM answer anyway (it will say it doesn't have info)
+        source_docs = []
+        if retrieval_context and retrieval_context.retrieved_docs:
+            source_docs = [
+                {
+                    "doc_id": doc["doc_id"],
+                    "text": doc["text"][:200] + "..." if len(doc["text"]) > 200 else doc["text"],
+                    "score": doc["score"]
+                }
+                for doc in retrieval_context.retrieved_docs
+            ]
+        
+        return {
+            "answer": answer_result.get("answer", "I couldn't generate a proper answer."),
+            "source_docs": source_docs,
+            "confidence": float(answer_result.get("confidence", 0.5))
+        }
+        
+    except Exception as e:
+        logger.error(f"Error answering question: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return {
+            "answer": "I encountered an error while trying to answer your question. Please try rephrasing or contact support.",
+            "source_docs": [],
+            "confidence": 0.0
+        }

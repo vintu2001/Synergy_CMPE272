@@ -536,6 +536,95 @@ Output JSON:
         except Exception as e:
             logger.error(f"Feedback analysis failed: {e}")
             return {'analysis': 'Failed', 'error': str(e)}
+    
+    async def answer_question(
+        self,
+        question: str,
+        rag_context: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Answer a resident's question using RAG context.
+        
+        Args:
+            question: The question to answer
+            rag_context: Retrieved context from RAG system
+        
+        Returns:
+            Dict with answer and confidence
+        """
+        if not self.enabled:
+            return {
+                'answer': 'I am currently unavailable. Please contact the property management office.',
+                'confidence': 0.0,
+                'error': 'LLM_DISABLED'
+            }
+        
+        try:
+            prompt = f"""You are a helpful apartment management assistant. Answer the resident's question based ONLY on the provided knowledge base context.
+
+QUESTION:
+{question}
+
+KNOWLEDGE BASE CONTEXT:
+{rag_context if rag_context else "No context available"}
+
+CRITICAL INSTRUCTIONS:
+1. Answer the question directly and concisely in plain, natural language
+2. Use ONLY information from the context provided above
+3. Write in complete sentences without any markdown formatting, asterisks, or special symbols
+4. Do NOT use **, ##, *, or any other formatting symbols - use plain text only
+5. Be friendly and conversational
+6. If the context doesn't contain the answer, say "I don't have that information in my knowledge base"
+7. Present policies and rules in a clear, easy-to-read way using simple paragraphs
+8. Use proper punctuation and spacing
+
+FORMATTING EXAMPLES:
+BAD: "**Dogs:** Up to 2 per unit * Weight: 50 lbs max"
+GOOD: "You can have up to 2 dogs per unit, with a maximum weight of 50 pounds each."
+
+BAD: "## Pet Policy - ** No restrictions **"
+GOOD: "According to our pet policy, there are no breed restrictions."
+
+Return your response as a JSON object with these fields:
+{{
+  "answer": "your clean, well-formatted answer here in plain text",
+  "confidence": a number between 0.0 and 1.0 indicating how confident you are
+}}
+
+Return ONLY the JSON object, no markdown formatting."""
+
+            logger.info("Generating answer with Gemini (llm_client)")
+            response = self.model.generate_content(
+                prompt,
+                generation_config=genai.GenerationConfig(
+                    temperature=0.3  # Lower temperature for factual answers
+                )
+            )
+            
+            result_text = response.text.strip()
+            
+            # Remove markdown code blocks if present
+            import re
+            result_text = re.sub(r'^```json\s*', '', result_text)
+            result_text = re.sub(r'^```\s*', '', result_text)
+            result_text = re.sub(r'\s*```$', '', result_text)
+            
+            result = json.loads(result_text)
+            
+            return {
+                'answer': result.get('answer', 'I couldn\'t generate a proper answer.'),
+                'confidence': float(result.get('confidence', 0.5))
+            }
+        
+        except Exception as e:
+            logger.error(f"Answer generation failed: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return {
+                'answer': 'I encountered an error while trying to answer your question. Please try rephrasing or contact support.',
+                'confidence': 0.0,
+                'error': str(e)
+            }
 
 
 # Global instance
