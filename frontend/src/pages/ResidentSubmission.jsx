@@ -159,6 +159,12 @@ export default function ResidentSubmission() {
       return;
     }
 
+    // Prevent submission while classification is in progress
+    if (analyzing) {
+      setToast({ message: "Please wait for the issue classification to complete before submitting.", type: "error" });
+      return;
+    }
+
     setSubmitting(true);
     setError("");
     try {
@@ -191,10 +197,12 @@ export default function ResidentSubmission() {
           type: "error"
         });
         
-        // Show escalation message in a modal or alert
-        setTimeout(() => {
-          alert(`⚠️ LLM Generation Failed\n\n${result.message}\n\n${result.action_required}\n\nPlease use the "Escalate to Human" option.`);
-        }, 500);
+        // Store error result with request_id so user can escalate
+        setSubmittedResult({
+          ...result,
+          isError: true,
+          escalation_required: result.escalation_required || false
+        });
         return;
       }
       
@@ -214,13 +222,21 @@ export default function ResidentSubmission() {
   
   // NEW: Handle option selection
   const handleSelectOption = async (optionId) => {
-    if (!submittedResult) return;
+    if (!submittedResult || !submittedResult.request_id) {
+      setToast({ 
+        message: "Request ID not available. Please try submitting again.", 
+        type: "error" 
+      });
+      return;
+    }
     
     setSelectingOption(true);
     try {
       const result = await selectOption(submittedResult.request_id, optionId);
       setToast({
-        message: `Option selected successfully! Your request is now being processed.`,
+        message: result.message || (optionId === "escalate_to_human" 
+          ? "Your request has been escalated to human support. You'll receive a response within 24 hours."
+          : "Option selected successfully! Your request is now being processed."),
         type: "success",
       });
       
@@ -306,27 +322,39 @@ export default function ResidentSubmission() {
                     </span>
                   )}
                 </div>
-                <div className="mt-6 flex flex-wrap items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={handleSubmit}
-                    disabled={submitting}
-                    className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200 dark:focus:ring-slate-700"
-                  >
-                    {submitting ? (
-                      <>
-                        <LoadingSpinner label="" />
-                        <span>Submitting...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Send className="h-4 w-4" />
-                        <span>Submit request</span>
-                      </>
-                    )}
-                  </button>
-                  {analyzing && <LoadingSpinner label="Analyzing..." />}
-                  {error && <span className="text-sm text-rose-500">{error}</span>}
+                <div className="mt-6 space-y-3">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={handleSubmit}
+                      disabled={submitting || analyzing}
+                      className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200 dark:focus:ring-slate-700"
+                    >
+                      {submitting ? (
+                        <>
+                          <LoadingSpinner label="" />
+                          <span>Submitting...</span>
+                        </>
+                      ) : analyzing ? (
+                        <>
+                          <LoadingSpinner label="" />
+                          <span>Classifying issue...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Send className="h-4 w-4" />
+                          <span>Submit request</span>
+                        </>
+                      )}
+                    </button>
+                    {error && <span className="text-sm text-rose-500">{error}</span>}
+                  </div>
+                  {analyzing && (
+                    <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+                      <LoadingSpinner label="" />
+                      <span className="font-medium">Analyzing your issue to suggest the best category and urgency. Please wait...</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -477,6 +505,65 @@ export default function ResidentSubmission() {
                     <span className="font-semibold text-slate-700 dark:text-slate-200">
                       {Math.round((submittedResult.answer.confidence || 0) * 100)}%
                     </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Display error state with escalation option */}
+          {submittedResult && submittedResult.isError && submittedResult.escalation_required && (
+            <div className="rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white p-6 shadow-lg dark:border-amber-800 dark:from-amber-950 dark:to-slate-900">
+              <div className="flex items-start gap-4">
+                <div className="flex-shrink-0 rounded-full bg-amber-100 p-3 dark:bg-amber-900/40">
+                  <AlertCircle className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+                </div>
+                <div className="flex-1 space-y-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">
+                      Unable to Generate Resolution Options
+                    </h3>
+                    <p className="text-slate-700 dark:text-slate-200 leading-relaxed">
+                      {submittedResult.message || "We encountered an issue while processing your request."}
+                    </p>
+                  </div>
+                  
+                  {/* Classification info */}
+                  {submittedResult.classification && (
+                    <div className="rounded-lg border border-amber-200 bg-white p-4 dark:border-amber-800 dark:bg-slate-950">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-3">
+                        Your Request Classification
+                      </p>
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <span className="text-slate-500 dark:text-slate-400">Category:</span>
+                          <span className="ml-2 font-semibold text-slate-700 dark:text-slate-200">
+                            {submittedResult.classification.category}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 dark:text-slate-400">Urgency:</span>
+                          <span className="ml-2 font-semibold text-slate-700 dark:text-slate-200">
+                            {submittedResult.classification.urgency}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Escalation button */}
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-2">
+                    <button
+                      onClick={() => handleSelectOption("escalate_to_human")}
+                      disabled={selectingOption}
+                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-rose-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-rose-400 disabled:opacity-60 disabled:cursor-not-allowed dark:bg-rose-400 dark:text-rose-950 dark:hover:bg-rose-300"
+                    >
+                      <UserX className="h-4 w-4" />
+                      {selectingOption ? "Processing..." : "Escalate to Human Support"}
+                    </button>
+                    <p className="text-xs text-slate-600 dark:text-slate-400 sm:ml-2">
+                      Our team will review your request and get back to you within 24 hours.
+                    </p>
                   </div>
                 </div>
               </div>

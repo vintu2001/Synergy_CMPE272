@@ -212,13 +212,56 @@ async def submit_request(request: MessageRequest):
             llm_error_message = 'We encountered an unexpected error while analyzing your request. Please escalate this issue to a human administrator.'
             logger.error(f"Simulation failed with unexpected error: {sim_error}")
         
-        # If LLM generation failed, return error response immediately
+        # If LLM generation failed, still create request in database for escalation
         if llm_generation_failed:
+            request_id = generate_request_id()
+            now = datetime.now(timezone.utc)
+            
+            # Create request with status SUBMITTED (will be escalated when user selects escalation)
+            resident_request = ResidentRequest(
+                request_id=request_id,
+                resident_id=request.resident_id,
+                message_text=request.message_text,
+                category=final_category,
+                urgency=final_urgency,
+                intent=classification.intent,
+                status=Status.SUBMITTED,
+                risk_forecast=risk_score,
+                classification_confidence=classification.confidence,
+                simulated_options=None,  # No options generated
+                created_at=now,
+                updated_at=now
+            )
+            
+            success = create_request(resident_request)
+            if not success:
+                logger.error(f"Failed to create request for LLM failure case: {request_id}")
+            
+            # Send to SQS if available
+            if sqs and SQS_URL:
+                try:
+                    payload = {
+                        "request_id": request_id,
+                        "resident_id": request.resident_id,
+                        "message_text": request.message_text,
+                        "category": final_category.value,
+                        "urgency": final_urgency.value,
+                        "intent": classification.intent.value,
+                        "risk_forecast": risk_score,
+                        "simulated_options": None,
+                        "submitted_at": now.isoformat(),
+                        "llm_generation_failed": True
+                    }
+                    sqs.send_message(QueueUrl=SQS_URL, MessageBody=json.dumps(payload))
+                except Exception as sqs_error:
+                    logger.warning(f"SQS enqueue failed for LLM error case (non-critical): {sqs_error}")
+            
             return {
                 "status": "error",
                 "error_type": "LLM_GENERATION_FAILED",
                 "message": llm_error_message,
                 "escalation_required": True,
+                "request_id": request_id,  # Include request_id so frontend can escalate
                 "classification": {
                     "category": final_category.value,
                     "urgency": final_urgency.value,
