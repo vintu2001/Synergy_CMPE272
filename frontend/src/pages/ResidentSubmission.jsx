@@ -470,8 +470,8 @@ export default function ResidentSubmission() {
                   </div>
                   
                   {/* Sources */}
-                  {submittedResult.answer.sources && submittedResult.answer.sources.length > 0 && (
-                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900/50">
+                  {((submittedResult.answer.source_docs || submittedResult.answer.sources)?.length > 0) && (
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900/50 mt-4">
                       <div className="flex items-center gap-2 mb-2">
                         <Info className="h-4 w-4 text-blue-500" />
                         <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
@@ -479,13 +479,13 @@ export default function ResidentSubmission() {
                         </p>
                       </div>
                       <div className="space-y-2">
-                        {submittedResult.answer.sources.map((source, idx) => (
+                        {(submittedResult.answer.source_docs || submittedResult.answer.sources || []).map((source, idx) => (
                           <div key={idx} className="rounded border border-slate-200 bg-white p-2 dark:border-slate-700 dark:bg-slate-950">
                             <p className="text-[10px] font-mono text-blue-600 dark:text-blue-400 mb-1">
-                              {source.doc_id}
+                              {source.doc_id || `Source ${idx + 1}`}
                             </p>
                             <p className="text-xs text-slate-600 dark:text-slate-400">
-                              {source.text}
+                              {source.text || source}
                             </p>
                           </div>
                         ))}

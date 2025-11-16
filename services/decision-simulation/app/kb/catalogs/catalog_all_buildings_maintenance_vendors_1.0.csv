@@ -1,0 +1,28 @@
+---
+doc_id: "CATALOG_001"
+type: "catalog"
+category: "maintenance_vendors"
+building_id: "all_buildings"
+effective_date: "2024-01-01"
+last_updated: "2024-11-10"
+version: "1.0"
+priority: "high"
+keywords: ["vendor", "contractor", "maintenance", "repair", "service"]
+---
+
+Vendor Name,Service Type,Phone,Email,Emergency Contact,Hours,Response Time,Rate,Notes
+ABC Plumbing Services,Plumbing,(555) 234-5678,service@abcplumbing.com,(555) 234-5679,24/7,1 hour,$$125/hr + parts,Preferred vendor - excellent response time
+Superior HVAC Solutions,HVAC Repair,(555) 345-6789,dispatch@superiorhvac.com,(555) 345-6790,M-F 7am-7pm,2-4 hours,$150/hr + parts,Annual maintenance contract in place
+Elite Electrical Co,Electrical,(555) 456-7890,info@eliteelectric.com,(555) 456-7891,24/7,1 hour,$$135/hr + materials,Licensed master electrician on staff
+Premier Appliance Repair,Appliances,(555) 567-8901,schedule@premierrepair.com,N/A,M-F 8am-5pm,Same day,$95/hr + parts,Specializes in GE and Whirlpool
+Citywide Locksmith,Locksmith,(555) 678-9012,info@citywidelocks.com,(555) 678-9013,24/7,30 min,$125 base + materials,Key cutting and re-keying services
+GreenThumb Landscaping,Landscaping,(555) 789-0123,service@greenthumb.com,N/A,M-Sa 6am-4pm,Scheduled,$Monthly contract,Weekly service included
+Pest Pro Solutions,Pest Control,(555) 890-1234,office@pestpro.com,N/A,M-F 8am-6pm,24-48 hours,$75-200/treatment,Monthly preventive service
+ClearView Glass,Glass Repair,(555) 901-2345,repair@clearviewglass.com,N/A,M-F 7am-5pm,Same/next day,$Per quote,Window and door glass replacement
+AllClean Janitorial,Cleaning,(555) 012-3456,booking@allclean.com,N/A,24/7,24 hours,$35/hr/cleaner,Emergency cleanup available
+RoofMasters Inc,Roofing,(555) 123-4567,info@roofmasters.com,N/A,M-F 7am-5pm,2-3 days,$Per quote,Licensed and insured - warranty work
+FastTrack Towing,Towing,(555) 234-5670,dispatch@fasttracktow.com,(555) 234-5671,24/7,30 min,$75-150/tow,Parking enforcement partnership
+SecureEntry Systems,Access Control,(555) 345-6701,support@secureentry.com,(555) 345-6702,24/7,2-4 hours,$Per call + parts,Maintain all entry systems
+FireSafe Equipment,Fire Safety,(555) 456-7802,service@firesafe.com,N/A,M-F 8am-5pm,Scheduled,$Monthly inspection,Annual fire system inspection
+PoolCare Professionals,Pool Service,(555) 567-8903,poolcare@poolpro.com,N/A,M-F 6am-2pm,Same week,$Monthly contract,Weekly chemical testing
+EcoWaste Management,Trash/Recycling,(555) 678-9014,service@ecowaste.com,N/A,M-F 6am-6pm,N/A,$Monthly contract,3x weekly pickup schedule

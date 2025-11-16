@@ -1,0 +1,48 @@
+---
+doc_id: "COST_004"
+type: "cost"
+category: "sop_bundles"
+building_id: "all_buildings"
+effective_date: "2024-01-01"
+last_updated: "2025-11-13"
+version: "1.0"
+keywords: ["SOP", "fixed price", "service bundle", "pricing", "standard"]
+author: "Operations Manager"
+approver: "Finance Director"
+---
+SOP_ID,Service_Name,Category,Urgency,Fixed_Price_USD,Duration_Minutes,Parts_Included,Exclusions,Notes
+SOP_001,Emergency Response,Emergency,emergency,150.00,30,None,After-hours add 50%,Initial assessment only
+SOP_002,Water Leak - Minor,Plumbing,urgent,200.00,60,P-trap + tape + sealant,Major pipe replacement,Under-sink or supply line
+SOP_003,Clogged Sink - Non-Urgent,Plumbing,standard,125.00,45,Drain cleaner chemicals,Main sewer line,Kitchen or bathroom sink
+SOP_004,Clogged Toilet,Plumbing,urgent,150.00,45,Flange repair kit,Main sewer line backup,Standard residential toilet
+SOP_005,Toilet Running Continuously,Plumbing,standard,140.00,60,Flapper + fill valve,Tank replacement,Repairs tank mechanism
+SOP_006,Faucet Drip Repair,Plumbing,standard,175.00,60,Cartridge + washers + O-rings,Fixture replacement,Single or dual handle
+SOP_007,AC Not Cooling,HVAC,urgent,250.00,90,Filter + diagnostic dye,Compressor/coil replacement,Diagnostic + minor repairs
+SOP_008,AC Filter Replacement,HVAC,standard,75.00,20,Standard filter,MERV 13 add $10,Routine maintenance
+SOP_009,Heater Not Working,HVAC,urgent,250.00,90,Filter + igniter test,Heat exchanger replacement,Winter emergency
+SOP_010,Thermostat Replacement,HVAC,standard,225.00,60,Programmable thermostat,Smart thermostat add $50,Standard upgrade
+SOP_011,Outlet Not Working,Electrical,urgent,175.00,60,Outlet + faceplate,Panel or wiring issues,Single outlet replacement
+SOP_012,Light Switch Replacement,Electrical,standard,120.00,30,Switch + faceplate,Dimmer add $20,Single pole standard
+SOP_013,GFCI Outlet Tripping,Electrical,urgent,200.00,75,GFCI outlet + testing,Circuit issues,Kitchen or bathroom
+SOP_014,Smoke Detector Replacement,Electrical,urgent,150.00,30,Hardwired detector + battery,Multiple units add $50 each,Single unit
+SOP_015,Light Fixture Replacement,Electrical,standard,185.00,60,Fixture basic,Ceiling fan add $75,Standard ceiling mount
+SOP_016,Lockout Service,Locksmith,urgent,125.00,30,None,After-hours add 100%,No damage entry
+SOP_017,Lock Rekey,Locksmith,standard,85.00,45,New keys x5,Additional keys $5 each,Single lock
+SOP_018,Deadbolt Installation,Locksmith,standard,175.00,60,Grade 2 deadbolt,Grade 1 add $40,Includes hardware
+SOP_019,Door Adjustment,Handyman,standard,110.00,45,Hinges + screws,Frame repair,Sticking or alignment
+SOP_020,Cabinet Repair,Handyman,standard,95.00,45,Hinges + screws + glue,Replacement cabinets,Doors and drawers
+SOP_021,Drywall Patch Small,Handyman,standard,125.00,90,Patch kit + paint sample,Large holes >12 inches,Under 12 inch diameter
+SOP_022,Window Screen Repair,Handyman,standard,65.00,30,Screen material,Full frame replacement,Standard window size
+SOP_023,Garbage Disposal Jam,Appliance,urgent,110.00,30,None,Motor replacement,Allen wrench service
+SOP_024,Garbage Disposal Replace,Appliance,standard,320.00,90,3/4 HP disposal + mounting,Electrical circuit upgrade,Includes removal
+SOP_025,Dishwasher Not Draining,Appliance,urgent,165.00,75,Drain hose cleaning,Pump replacement,Filter and hose service
+SOP_026,Refrigerator Not Cooling,Appliance,urgent,185.00,60,Diagnostic only,Compressor/coil work,Initial assessment
+SOP_027,Dryer Not Heating,Appliance,urgent,195.00,75,Thermal fuse + belt check,Heating element work,Gas or electric
+SOP_028,Move-In Inspection,Inspection,standard,0.00,45,Documentation,None,Included in lease
+SOP_029,Move-Out Inspection,Inspection,standard,0.00,60,Documentation + photos,Damage assessment separate,Final walkthrough
+SOP_030,Unit Turnover Cleaning,Cleaning,standard,450.00,240,All supplies,Deep clean add $150,Standard 1BR apartment
+SOP_031,Carpet Cleaning - 1BR,Cleaning,standard,150.00,90,Cleaning solution,Replacement or repair,Steam cleaning
+SOP_032,Pest Control - Preventative,Pest,standard,85.00,60,Standard treatment,Infestation add $100,Quarterly service
+SOP_033,Pest Control - Roaches,Pest,urgent,145.00,75,Gel bait + spray,Multiple visits if needed,Initial treatment
+SOP_034,Pest Control - Bed Bugs,Pest,urgent,350.00,120,Heat treatment prep,Full heat treatment extra,Chemical treatment only
+SOP_035,Snow Removal - Walkways,Landscaping,urgent,95.00,60,Salt application,Parking lot separate,Building entrances

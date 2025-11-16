@@ -50,7 +50,28 @@ The Agentic Apartment Manager is built as a distributed, event-driven system on 
 
 ```
 Synergy_CMPE272/
-├── backend/                 # FastAPI microservices
+├── services/                 # Microservices (NEW)
+│   ├── request-management/  # Request Management Service (Railway)
+│   │   ├── app/
+│   │   ├── Dockerfile
+│   │   ├── requirements.txt
+│   │   └── railway.json
+│   ├── ai-processing/       # AI Processing Service (Railway)
+│   │   ├── app/
+│   │   ├── Dockerfile
+│   │   ├── requirements.txt
+│   │   └── railway.json
+│   ├── decision-simulation/ # Decision & Simulation Service (EC2)
+│   │   ├── app/
+│   │   ├── Dockerfile
+│   │   └── requirements.txt
+│   └── execution/           # Execution Service (Railway)
+│       ├── app/
+│       ├── Dockerfile
+│       ├── requirements.txt
+│       └── railway.json
+│
+├── backend/                 # Monolith (legacy - for reference)
 │   ├── app/                 # Application code
 │   │   ├── agents/          # Agent implementations
 │   │   ├── rag/             # RAG module
@@ -80,7 +101,9 @@ Synergy_CMPE272/
 │
 └── infrastructure/          # Infrastructure as code
     ├── aws/                 # AWS resources
-    └── docker/              # Docker compose
+    ├── docker/              # Docker compose
+    └── ec2/                 # EC2 deployment configs
+        └── docker-compose.yml
 ```
 
 ---
@@ -91,7 +114,141 @@ Synergy_CMPE272/
 - Python 3.11+
 - Node.js (for frontend)
 - AWS Account with appropriate permissions
-- Docker (optional, for containerized development)
+- Docker (for containerized development)
+- Railway.app account (free - https://railway.app)
+- GitHub account (for deployment)
+
+---
+
+## 🚀 Quick Start: Deploy Microservices
+
+The system is now deployed as **4 microservices** using a **Hybrid Railway + EC2** strategy:
+
+- **Railway.app** (3 services): Request Management, AI Processing, Execution
+- **AWS EC2** (1 service): Decision & Simulation (with RAG/ChromaDB)
+
+### Step 1: Deploy Services on Railway
+
+1. **Sign up for Railway:**
+   - Go to https://railway.app
+   - Sign up with GitHub (free - $5 credit/month)
+
+2. **Deploy Request Management Service:**
+   ```bash
+   # In Railway dashboard:
+   # 1. Click "New Project"
+   # 2. Select "Deploy from GitHub repo"
+   # 3. Choose your repository
+   # 4. Set root directory: services/request-management
+   # 5. Add environment variables (see DEPLOYMENT_GUIDE.md)
+   ```
+
+3. **Deploy AI Processing Service:**
+   ```bash
+   # Same process, set root directory: services/ai-processing
+   ```
+
+4. **Deploy Execution Service:**
+   ```bash
+   # Same process, set root directory: services/execution
+   ```
+
+### Step 2: Deploy Decision & Simulation Service on EC2
+
+1. **Launch EC2 Instance:**
+   - Go to AWS Console → EC2
+   - Launch Ubuntu 22.04 LTS (t2.micro - free tier)
+   - Configure security group (open port 8003)
+
+2. **SSH into EC2:**
+   ```bash
+   ssh -i your-key.pem ubuntu@<ec2-ip>
+   ```
+
+3. **Install Docker:**
+   ```bash
+   sudo apt update
+   sudo apt install -y docker.io docker-compose
+   sudo usermod -aG docker ubuntu
+   newgrp docker
+   ```
+
+4. **Deploy Service:**
+   ```bash
+   git clone <your-repo>
+   cd Synergy_CMPE272/infrastructure/ec2
+   
+   # Create .env file with GEMINI_API_KEY, AWS credentials
+   nano .env
+   
+   # Deploy
+   docker-compose up -d
+   
+   # Check status
+   curl http://localhost:8003/health
+   ```
+
+### Step 3: Configure Service URLs
+
+Update environment variables in Railway services:
+- `AI_PROCESSING_SERVICE_URL` → Railway URL
+- `DECISION_SIMULATION_SERVICE_URL` → `http://<ec2-ip>:8003`
+- `EXECUTION_SERVICE_URL` → Railway URL
+
+### Step 4: Test Deployment
+
+```bash
+# Test each service
+curl https://request-management-service.up.railway.app/health
+curl https://ai-processing-service.up.railway.app/health
+curl http://<ec2-ip>:8003/health
+curl https://execution-service.up.railway.app/health
+
+# Test end-to-end
+curl -X POST https://request-management-service.up.railway.app/api/v1/submit-request \
+  -H "Content-Type: application/json" \
+  -d '{"resident_id": "RES_1001", "message_text": "AC is broken"}'
+```
+
+**📖 For detailed deployment instructions, see [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)**
+
+---
+
+## 🧪 Local Testing (End-to-End from UI)
+
+To test all microservices locally with the frontend:
+
+### Quick Start
+
+```bash
+# Run setup script (initializes ChromaDB, creates config files)
+./scripts/setup_local_testing.sh
+
+# Edit environment variables
+nano infrastructure/docker/.env
+
+# Start all services
+cd infrastructure/docker
+docker-compose -f docker-compose.microservices.yml up -d
+
+# Start frontend (in another terminal)
+cd frontend
+npm run dev
+```
+
+**Open:** `http://localhost:5173` in your browser
+
+**📖 For detailed local testing instructions, see [LOCAL_TESTING_GUIDE.md](LOCAL_TESTING_GUIDE.md)**
+
+---
+
+## Local Development Setup
+
+### Prerequisites
+- Python 3.11+
+- Node.js (for frontend)
+- AWS Account with appropriate permissions
+- Docker (for containerized development)
 
 ### Backend Setup
 
@@ -168,10 +325,33 @@ See `frontend/README.md` for details.
 
 ### Docker Setup (Optional)
 
-1. **Run with Docker Compose**
+1. **Run with Docker Compose (Monolith)**
    ```bash
    cd infrastructure/docker
    docker-compose up
+   ```
+
+2. **Run Microservices Locally**
+   ```bash
+   # Request Management
+   cd services/request-management
+   docker build -t request-management .
+   docker run -p 8001:8001 request-management
+   
+   # AI Processing
+   cd services/ai-processing
+   docker build -t ai-processing .
+   docker run -p 8002:8002 ai-processing
+   
+   # Decision & Simulation (needs ChromaDB)
+   cd services/decision-simulation
+   docker build -t decision-simulation .
+   docker run -p 8003:8003 -v $(pwd)/vector_stores:/app/vector_stores decision-simulation
+   
+   # Execution
+   cd services/execution
+   docker build -t execution .
+   docker run -p 8004:8004 execution
    ```
 
 ---
@@ -224,9 +404,21 @@ Once the backend is running, visit:
 
 ---
 
+## Deployment Documentation
+
+- **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** - Complete deployment guide for Railway + EC2
+- **[MICROSERVICES_ARCHITECTURE_PLAN.md](MICROSERVICES_ARCHITECTURE_PLAN.md)** - Architecture design and reasoning
+- **[FILE_STRUCTURE_MIGRATION_PLAN.md](FILE_STRUCTURE_MIGRATION_PLAN.md)** - File structure changes
+- **[CHROMADB_AND_DEPLOYMENT_OPTIONS.md](CHROMADB_AND_DEPLOYMENT_OPTIONS.md)** - ChromaDB alternatives and deployment options
+- **[FREE_DEPLOYMENT_PLATFORMS.md](FREE_DEPLOYMENT_PLATFORMS.md)** - Free platform comparison
+
+---
+
 ## Resources
 
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
 - [AWS Documentation](https://docs.aws.amazon.com/)
 - [AWS SQS Documentation](https://docs.aws.amazon.com/sqs/)
 - [AWS DynamoDB Documentation](https://docs.aws.amazon.com/dynamodb/)
+- [Railway.app Documentation](https://docs.railway.app/)
+- [Docker Documentation](https://docs.docker.com/)
