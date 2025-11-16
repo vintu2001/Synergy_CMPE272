@@ -42,129 +42,193 @@ export default function Home() {
   };
 
   return (
-    <div className="w-full min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center py-12 px-4">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <p className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-1 text-sm font-semibold text-white shadow-lg dark:bg-slate-200 dark:text-slate-900">
+    <div className="relative w-full min-h-screen flex items-center justify-center py-12 px-4">
+      {/* Background image */}
+      <div
+        className="absolute inset-0 bg-cover bg-center"
+        style={{ backgroundImage: "url('/apartment-bg.webp')" }}
+      />
+      {/* Dark overlay + slight blur for readability */}
+      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-[2px]" />
+
+      <div className="relative z-10 w-full max-w-6xl grid gap-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] items-center">
+        {/* Left hero section (only on lg+) */}
+        <div className="hidden lg:flex flex-col gap-6 text-slate-50">
+          <p className="inline-flex items-center gap-2 rounded-full bg-slate-900/70 px-4 py-2 text-xs font-semibold shadow-lg">
             <Building2 className="h-4 w-4" />
-            Synergy Resident Portal
+            Synergy Apartment Management
           </p>
-          <h1 className="mt-6 text-3xl font-semibold text-slate-900 dark:text-white">
-            {isAdminView ? "Admin Login" : "Resident Login"}
+
+          <h1 className="text-4xl font-semibold leading-tight">
+            Smart, stress-free living for modern communities.
           </h1>
-          <p className="mt-3 text-base text-slate-600 dark:text-slate-300">
-            {isAdminView
-              ? "Access the admin console to manage escalations and resolve issues."
-              : "Submit service requests and track the progress of your apartment services."}
+
+          <p className="text-base text-slate-100/90 max-w-xl">
+            Synergy connects residents and building managers in a single,
+            streamlined portal. Submit requests, track resolutions, and keep
+            your building running smoothly.
           </p>
+
+          <div className="flex flex-wrap gap-4 text-sm text-slate-100/90">
+            <div className="inline-flex items-center gap-2 rounded-xl bg-slate-900/70 px-3 py-2">
+              <User className="h-4 w-4" />
+              <span>Resident-first service requests</span>
+            </div>
+            <div className="inline-flex items-center gap-2 rounded-xl bg-slate-900/70 px-3 py-2">
+              <Shield className="h-4 w-4" />
+              <span>Secure admin controls</span>
+            </div>
+          </div>
         </div>
 
-        {!isAdminView ? (
-          <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-lg dark:border-slate-800 dark:bg-slate-900">
-            <div className="mb-6 flex items-center gap-3">
-              <div className="rounded-full bg-slate-900 p-3 text-white shadow-md dark:bg-slate-100 dark:text-slate-900">
-                <User className="h-5 w-5" />
-              </div>
-              <div>
-                <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Resident Login</h2>
-                <p className="text-sm text-slate-500 dark:text-slate-300">
-                  Enter your details to access the resident portal
-                </p>
-              </div>
-            </div>
-
-            <form className="space-y-4" onSubmit={handleResidentSubmit}>
-              <div className="flex flex-col gap-2">
-                <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Your name</label>
-                <input
-                  className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-400 dark:focus:ring-slate-800"
-                  placeholder="e.g., Jordan Smith"
-                  value={residentName}
-                  onChange={(e) => setResidentName(e.target.value)}
-                />
-              </div>
-              <div className="flex flex-col gap-2">
-                <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Apartment number</label>
-                <input
-                  className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-400 dark:focus:ring-slate-800"
-                  placeholder="e.g., RES_1001"
-                  value={apartmentNumber}
-                  onChange={(e) => setApartmentNumber(e.target.value)}
-                />
-              </div>
-              {residentError && <p className="text-sm text-red-500">{residentError}</p>}
-              <button
-                type="submit"
-                className="flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-md transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300 active:scale-[0.99] dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
-              >
-                Continue to Resident Portal
-                <ArrowRight className="h-4 w-4" />
-              </button>
-            </form>
-
-            <div className="mt-6 text-center">
-              <button
-                onClick={() => setIsAdminView(true)}
-                className="text-sm text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 transition"
-              >
-                Are you an admin? <span className="font-semibold">Login as Admin instead</span>
-              </button>
-            </div>
+        {/* Right login card */}
+        <div className="w-full max-w-md ml-auto">
+          <div className="mb-6 text-center lg:text-left">
+            <p className="inline-flex items-center gap-2 rounded-full bg-slate-900/80 px-3 py-1 text-xs font-semibold text-slate-100 shadow-lg">
+              <Building2 className="h-4 w-4" />
+              Synergy Resident Portal
+            </p>
+            <h2 className="mt-4 text-3xl font-semibold text-white">
+              {isAdminView ? "Admin Login" : "Resident Login"}
+            </h2>
+            <p className="mt-3 text-sm text-slate-200">
+              {isAdminView
+                ? "Use your admin key to manage escalations and building services."
+                : "Enter your details to submit new requests and track ongoing issues."}
+            </p>
           </div>
-        ) : (
-          <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-lg dark:border-slate-800 dark:bg-slate-900">
-            <div className="mb-6 flex items-center gap-3">
-              <div className="rounded-full bg-purple-600 p-3 text-white shadow-md dark:bg-purple-400 dark:text-slate-900">
-                <Shield className="h-5 w-5" />
-              </div>
-              <div>
-                <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Admin Login</h2>
-                <p className="text-sm text-slate-500 dark:text-slate-300">
-                  Enter your credentials to access the admin console
-                </p>
-              </div>
-            </div>
 
-            <form className="space-y-4" onSubmit={handleAdminSubmit}>
-              <div className="flex flex-col gap-2">
-                <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Admin password</label>
-                <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm focus-within:border-slate-500 focus-within:ring-2 focus-within:ring-slate-200 dark:border-slate-700 dark:bg-slate-950 dark:focus-within:border-slate-400 dark:focus-within:ring-slate-800">
-                  <KeyRound className="h-4 w-4 text-slate-400 dark:text-slate-500" />
-                  <input
-                    type="password"
-                    className="w-full border-0 bg-transparent text-sm text-slate-900 focus:outline-none dark:text-slate-100"
-                    placeholder="Enter admin access password"
-                    value={adminKey}
-                    onChange={(e) => setAdminKey(e.target.value)}
-                  />
+          {!isAdminView ? (
+            <div className="rounded-2xl bg-white/95 p-8 shadow-2xl backdrop-blur-sm dark:bg-slate-900/95">
+              <div className="mb-6 flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-900 text-slate-50 dark:bg-slate-100 dark:text-slate-900">
+                  <User className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold text-slate-900 dark:text-white">
+                    Resident Login
+                  </h3>
+                  <p className="text-sm text-slate-500 dark:text-slate-300">
+                    Enter your details to access the resident portal.
+                  </p>
                 </div>
               </div>
-              {adminError && <p className="text-sm text-red-500">{adminError}</p>}
-              <button
-                type="submit"
-                className="flex w-full items-center justify-center gap-2 rounded-lg bg-purple-600 px-4 py-3 text-sm font-semibold text-white shadow-md transition hover:bg-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 active:scale-[0.99] dark:bg-purple-400 dark:text-slate-900 dark:hover:bg-purple-300"
-              >
-                Enter Admin Console
-                <ArrowRight className="h-4 w-4" />
-              </button>
-            </form>
 
-            <p className="mt-4 text-xs text-slate-500 dark:text-slate-400">
-              Tip: The password corresponds to your admin API key.
-            </p>
+              <form className="space-y-4" onSubmit={handleResidentSubmit}>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                    Your name
+                  </label>
+                  <input
+                    type="text"
+                    value={residentName}
+                    onChange={(e) => setResidentName(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-slate-300 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-50"
+                    placeholder="e.g. Alex Chen"
+                  />
+                </div>
 
-            <div className="mt-6 text-center">
-              <button
-                onClick={() => setIsAdminView(false)}
-                className="text-sm text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 transition"
-              >
-                Not an admin? <span className="font-semibold">Login as Resident instead</span>
-              </button>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                    Apartment number
+                  </label>
+                  <input
+                    type="text"
+                    value={apartmentNumber}
+                    onChange={(e) => setApartmentNumber(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-slate-300 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-50"
+                    placeholder="e.g. 4B"
+                  />
+                </div>
+
+                {residentError && (
+                  <p className="text-sm text-rose-500">{residentError}</p>
+                )}
+
+                <button
+                  type="submit"
+                  className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-slate-50 shadow-md hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 focus:ring-offset-slate-900/0 dark:bg-slate-100 dark:text-slate-900"
+                >
+                  Continue as Resident
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+              </form>
+
+              <div className="mt-6 border-t border-slate-100 pt-4 text-center dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsAdminView(true)}
+                  className="text-sm text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100 transition"
+                >
+                  Are you an admin?{" "}
+                  <span className="font-semibold">Login as Admin instead</span>
+                </button>
+              </div>
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="rounded-2xl bg-white/95 p-8 shadow-2xl backdrop-blur-sm dark:bg-slate-900/95">
+              <div className="mb-6 flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-500 text-white shadow-md dark:bg-amber-400 dark:text-slate-900">
+                  <Shield className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold text-slate-900 dark:text-white">
+                    Admin Console
+                  </h3>
+                  <p className="text-sm text-slate-500 dark:text-slate-300">
+                    Enter your admin key to access escalations and analytics.
+                  </p>
+                </div>
+              </div>
+
+              <form className="space-y-4" onSubmit={handleAdminSubmit}>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                    Admin key
+                  </label>
+                  <div className="relative">
+                    <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+                      <KeyRound className="h-4 w-4" />
+                    </span>
+                    <input
+                      type="password"
+                      value={adminKey}
+                      onChange={(e) => setAdminKey(e.target.value)}
+                      className="w-full rounded-lg border border-slate-200 bg-white px-9 py-2 text-sm text-slate-900 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-amber-300 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-50"
+                      placeholder="Enter admin key"
+                    />
+                  </div>
+                </div>
+
+                {adminError && (
+                  <p className="text-sm text-rose-500">{adminError}</p>
+                )}
+
+                <button
+                  type="submit"
+                  className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 focus:ring-offset-2 focus:ring-offset-slate-900/0"
+                >
+                  Sign in as Admin
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+              </form>
+
+              <div className="mt-6 border-t border-slate-100 pt-4 text-center dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsAdminView(false)}
+                  className="text-sm text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100 transition"
+                >
+                  Not an admin?{" "}
+                  <span className="font-semibold">
+                    Login as Resident instead
+                  </span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
 }
-
