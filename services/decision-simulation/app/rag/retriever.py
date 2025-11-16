@@ -28,8 +28,8 @@ logger.info(f"RAG Retriever module loaded - {RETRIEVER_VERSION}")
 
 # Query expansion dictionary for common abbreviations and synonyms
 QUERY_EXPANSIONS = {
-    "ac": ["air conditioning", "HVAC", "cooling system", "climate control", "maintenance", "repair", "service"],
-    "hvac": ["heating ventilation air conditioning", "climate control", "AC", "maintenance", "repair"],
+    "ac": ["air conditioning", "HVAC", "cooling system", "climate control", "maintenance", "repair", "service", "vent", "ventilation", "duct", "filter"],
+    "hvac": ["heating ventilation air conditioning", "climate control", "AC", "maintenance", "repair", "vent", "ventilation"],
     "fridge": ["refrigerator", "cooling appliance", "appliance", "maintenance"],
     "dishwasher": ["dish washer", "dishwashing machine", "appliance", "maintenance"],
     "washer": ["washing machine", "laundry machine", "appliance", "maintenance"],
@@ -40,6 +40,15 @@ QUERY_EXPANSIONS = {
     "noisy": ["loud", "noise", "making noise", "disturbance", "complaint"],
     "maintenance": ["repair", "service", "fix", "maintenance request", "work order"],
     "issue": ["problem", "request", "maintenance", "repair"],
+    "parking": ["parking space", "parking spot", "car", "vehicle", "garage", "parking lot", "visitor parking", "guest parking", "policy", "rules"],
+    "guest": ["visitor", "visitors", "guest parking", "visitor parking", "policy", "rules", "procedure"],
+    "visitor": ["guest", "visitors", "visitor parking", "guest parking", "policy", "rules"],
+    "policy": ["rule", "rules", "procedure", "procedures", "guideline", "guidelines", "regulation", "regulations"],
+    "parking policy": ["parking rules", "parking procedure", "parking guidelines", "visitor parking", "guest parking"],
+    "dust": ["dirty", "cleaning", "clean", "maintenance", "service", "filter", "vent", "ventilation"],
+    "blocked": ["clogged", "obstructed", "stuck", "not working", "maintenance", "repair"],
+    "vent": ["ventilation", "air vent", "duct", "air duct", "HVAC", "AC", "maintenance"],
+    "cleaning": ["clean", "maintenance", "service", "upkeep", "maintenance request"],
 }
 
 
@@ -195,11 +204,11 @@ class RAGRetriever:
             if category:
                 # Add category-related terms to improve semantic matching
                 category_terms = {
-                    "maintenance": ["maintenance request", "repair", "service", "work order", "policy", "procedure", "SLA", "service level agreement", "vendor", "technician", "HVAC", "plumbing", "electrical"],
+                    "maintenance": ["maintenance request", "repair", "service", "work order", "policy", "procedure", "SLA", "service level agreement", "vendor", "technician", "HVAC", "plumbing", "electrical", "cleaning", "filter", "vent", "ventilation"],
                     "billing": ["rent payment", "billing", "payment", "policy", "procedure", "fee", "charge", "due date"],
                     "security": ["security", "access", "key", "policy", "procedure", "lock", "entry", "visitor"],
                     "deliveries": ["package", "delivery", "mail", "policy", "procedure", "parcel", "mailroom"],
-                    "amenities": ["amenity", "pool", "fitness", "policy", "procedure", "gym", "facility", "reservation"],
+                    "amenities": ["amenity", "pool", "fitness", "policy", "procedure", "gym", "facility", "reservation", "parking", "visitor parking", "guest parking"],
                 }
                 if category.lower() in category_terms:
                     enhanced_query = f"{expanded_query} {' '.join(category_terms[category.lower()])}"
@@ -207,7 +216,8 @@ class RAGRetriever:
                 else:
                     enhanced_query = f"{expanded_query} policy procedure SOP service level agreement"
             else:
-                enhanced_query = f"{expanded_query} policy procedure SOP service level agreement"
+                # For questions without category, add general policy terms
+                enhanced_query = f"{expanded_query} policy procedure SOP service level agreement rules guidelines"
             
             # Generate query embedding
             query_embedding = self.embedding_model.encode(enhanced_query).tolist()
@@ -565,14 +575,26 @@ async def answer_question(
     logger.info(f"Answering question: '{question[:100]}...'")
     
     try:
-        # Retrieve relevant documents
+        # Retrieve relevant documents with very low threshold for questions
+        # Questions need broader matching since they're often phrased differently
         retrieval_context = await retrieve_relevant_docs(
             query=question,
             building_id=building_id,
             category=category,
             top_k=top_k,
-            similarity_threshold=0.5  # Lower threshold for questions
+            similarity_threshold=0.3  # Very low threshold for questions to catch more documents
         )
+        
+        # If no docs found with 0.3, try even lower (0.2) as fallback
+        if not retrieval_context or len(retrieval_context.retrieved_docs) == 0:
+            logger.warning(f"No documents found with threshold 0.3, trying 0.2 for question: '{question[:50]}...'")
+            retrieval_context = await retrieve_relevant_docs(
+                query=question,
+                building_id=building_id,
+                category=category,
+                top_k=top_k * 2,  # Get more documents
+                similarity_threshold=0.2  # Very permissive threshold
+            )
         
         # Format context from retrieved documents
         if retrieval_context and retrieval_context.retrieved_docs:

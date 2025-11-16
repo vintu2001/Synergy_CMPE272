@@ -150,14 +150,25 @@ class AgenticResolutionSimulator:
             if rag_enabled:
                 try:
                     # Retrieve relevant documents for simulation context
-                    # Use lower similarity threshold (0.5) for better document retrieval
+                    # Use lower similarity threshold (0.4) for better document retrieval
                     rag_context = await retrieve_relevant_docs(
                         query=message_text,
                         category=category.value,
                         building_id=building_id,
                         top_k=int(os.getenv('RAG_TOP_K', '5')),
-                        similarity_threshold=0.5  # Lower threshold to find more documents
+                        similarity_threshold=0.4  # Lower threshold to find more documents
                     )
+                    
+                    # If no docs found, try even lower threshold
+                    if not rag_context or len(rag_context.retrieved_docs) == 0:
+                        logger.warning(f"No RAG documents found with threshold 0.4, trying 0.3 for: '{message_text[:50]}...'")
+                        rag_context = await retrieve_relevant_docs(
+                            query=message_text,
+                            category=category.value,
+                            building_id=building_id,
+                            top_k=int(os.getenv('RAG_TOP_K', '5')) * 2,
+                            similarity_threshold=0.3  # Very permissive
+                        )
                     
                     if rag_context:
                         logger.info(f"RAG retrieval successful: {rag_context.total_retrieved} documents retrieved")
