@@ -386,7 +386,7 @@ Risk Score: {risk_score:.2f}/1.0 (0=low risk, 1=high risk)
 {tools_context}
 {rag_section}
 
-=== YOUR TASK ===
+=== INSTRUCTIONS ===
 As an intelligent agent, you must:
 
 1. ANALYZE the issue deeply:

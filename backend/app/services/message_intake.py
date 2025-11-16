@@ -14,7 +14,6 @@ from app.agents.risk_prediction_agent import predict_risk
 from app.agents.simulation_agent import simulator
 from app.agents.decision_agent import make_decision
 from app.services.execution_layer import execute_decision
-from app.services.governance import log_decision  # Added for Ticket 15
 from app.utils.helpers import generate_request_id
 from datetime import datetime, timezone
 import re
@@ -378,7 +377,7 @@ async def submit_request(request: MessageRequest):
 async def select_option(selection: SelectOptionRequest):
     """
     Resident selects an option from the 3 simulated options, or escalates to human.
-    This triggers execution and governance logging.
+    This triggers execution.
     """
     try:
         from app.services.database import get_table, get_request_by_id
@@ -450,52 +449,6 @@ async def select_option(selection: SelectOptionRequest):
             "estimated_time": selected_option.get('estimated_time', selected_option.get('time_to_resolution', 1.0)),
             "message": f"Executing: {selected_option['action']}"
         }
-        
-        # Log to governance system
-        try:
-            from app.models.schemas import DecisionResponse, ClassificationResponse, IssueCategory, Urgency, Intent
-            
-            # Create a decision response from user's selection
-            decision_result = DecisionResponse(
-                chosen_action=selected_option['action'],
-                chosen_option_id=selection.selected_option_id,
-                reasoning=f"User selected this option from {len(simulated_options)} available options.",
-                alternatives_considered=[opt['option_id'] for opt in simulated_options if opt['option_id'] != selection.selected_option_id],
-                policy_scores={opt['option_id']: 0.0 for opt in simulated_options},
-                escalation_reason=None
-            )
-            
-            # Reconstruct classification
-            classification = ClassificationResponse(
-                category=IssueCategory(request['category']),
-                urgency=Urgency(request['urgency']),
-                intent=Intent(request['intent']),
-                confidence=request.get('classification_confidence', 0.9),
-                message_text=request.get('message_text', '')
-            )
-            
-            # Log decision
-            estimated_cost = selected_option['estimated_cost']
-            estimated_time = selected_option.get('estimated_time', selected_option.get('time_to_resolution', 1.0))
-            config = PolicyConfiguration()
-            
-            await log_decision(
-                request_id=selection.request_id,
-                resident_id=request['resident_id'],
-                decision=decision_result,
-                classification=classification,
-                risk_score=request.get('risk_forecast'),
-                total_options_simulated=len(simulated_options),
-                estimated_cost=estimated_cost,
-                estimated_time=estimated_time,
-                exceeds_budget_threshold=estimated_cost > config.max_cost,
-                exceeds_time_threshold=estimated_time > config.max_time,
-                policy_weights=PolicyWeights().dict()
-            )
-            
-            logger.info(f"User selection logged to governance for request {selection.request_id}")
-        except Exception as gov_error:
-            logger.warning(f"Governance logging failed (non-critical): {gov_error}")
         
         return {
             "status": "success",

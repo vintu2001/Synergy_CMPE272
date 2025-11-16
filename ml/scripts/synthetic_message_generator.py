@@ -1,5 +1,5 @@
 """
-Synthetic Resident Message Generator - Ticket 2
+Synthetic Resident Message Generator
 Generates realistic, freeform resident messages for development and testing.
 
 Features:

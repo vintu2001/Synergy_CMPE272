@@ -1,5 +1,5 @@
 """
-Decision Agent - Ticket 13
+Decision Agent
 Evaluates simulated options, checks for human escalation, and selects optimal action using a policy-based scoring system.
 """
 from fastapi import APIRouter, HTTPException, Body, Query
