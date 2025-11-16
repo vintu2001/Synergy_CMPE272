@@ -14,13 +14,24 @@ from app.agents.risk_prediction_agent import predict_risk
 from app.agents.simulation_agent import simulator
 from app.agents.decision_agent import make_decision
 from app.services.execution_layer import execute_decision
+from app.services.governance import log_decision
 from app.utils.helpers import generate_request_id
+from app.utils.cloudwatch_logger import (
+    log_request_submission,
+    log_repeat_detection,
+    log_classification,
+    log_risk_assessment,
+    log_simulation_result,
+    log_error,
+    ensure_log_stream
+)
 from datetime import datetime, timezone
 import re
 import os
 import json
 import boto3
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +41,13 @@ router = APIRouter()
 REGION = os.getenv("AWS_REGION")
 SQS_URL = os.getenv("AWS_SQS_QUEUE_URL")
 sqs = boto3.client("sqs", region_name=REGION) if SQS_URL else None
+
+# Initialize CloudWatch logs on startup
+try:
+    ensure_log_stream()
+    logger.info("CloudWatch log stream initialized")
+except Exception as e:
+    logger.warning(f"Could not initialize CloudWatch logs: {e}")
 
 
 def normalize_text(text: str) -> str:
@@ -45,91 +63,45 @@ async def submit_request(request: MessageRequest):
     """
     Submit a resident request with automatic classification, risk prediction, and resolution simulation.
     """
+    start_time = time.time()
+    request_id = generate_request_id()
+    
     try:
+        logger.info(f"Processing request for resident: {request.resident_id}")
         _normalized_text = normalize_text(request.message_text)
         
-        # Step 1: Classification
+        # Classification
         classification = await classify_message_endpoint(request)
         
         final_category = request.category if request.category else classification.category
         final_urgency = request.urgency if request.urgency else classification.urgency
         
-        # Extract building_id from resident_id for RAG retrieval
-        # Format: RES_BuildingXYZ_1001 -> BuildingXYZ
-        building_id = None
-        if request.resident_id and request.resident_id.startswith('RES_'):
-            parts = request.resident_id.split('_')
-            if len(parts) >= 3:
-                building_id = parts[1]
-                logger.info(f"Extracted building_id: {building_id} from resident_id: {request.resident_id}")
+        # Log classification to CloudWatch
+        log_classification(
+            request_id=request_id,
+            category=final_category.value,
+            urgency=final_urgency.value,
+            intent=classification.intent.value,
+            confidence=classification.confidence
+        )
         
-        # SPECIAL HANDLING FOR QUESTIONS: Skip options generation, just answer directly
-        if classification.intent.value == "answer_a_question":
-            logger.info(f"Intent is answer_a_question - generating direct answer using RAG")
-            try:
-                from app.rag.retriever import answer_question
-                
-                # Use RAG to answer the question
-                answer_result = await answer_question(
-                    question=request.message_text,
-                    building_id=building_id,
-                    category=final_category.value
-                )
-                
-                request_id = generate_request_id()
-                now = datetime.now(timezone.utc)
-                
-                # Store minimal request in database
-                resident_request = ResidentRequest(
-                    request_id=request_id,
-                    resident_id=request.resident_id,
-                    message_text=request.message_text,
-                    category=final_category,
-                    urgency=final_urgency,
-                    intent=classification.intent,
-                    status=Status.RESOLVED,  # Questions are immediately resolved
-                    risk_forecast=None,
-                    classification_confidence=classification.confidence,
-                    simulated_options=None,
-                    created_at=now,
-                    updated_at=now,
-                    resolved_at=now,
-                    resolved_by="AI_Assistant"
-                )
-                
-                create_request(resident_request)
-                
-                return {
-                    "status": "answered",
-                    "message": "Question answered successfully!",
-                    "request_id": request_id,
-                    "classification": {
-                        "category": final_category.value,
-                        "urgency": final_urgency.value,
-                        "intent": classification.intent.value,
-                        "confidence": classification.confidence
-                    },
-                    "answer": {
-                        "text": answer_result.get("answer", "I don't have enough information to answer that question."),
-                        "sources": answer_result.get("source_docs", []),
-                        "confidence": answer_result.get("confidence", 0.5)
-                    }
-                }
-            except Exception as answer_error:
-                logger.error(f"Failed to answer question: {answer_error}")
-                # Fall back to regular flow if answering fails
-                return {
-                    "status": "error",
-                    "message": "I couldn't find a good answer to your question. Please rephrase or contact support.",
-                    "classification": {
-                        "category": final_category.value,
-                        "urgency": final_urgency.value,
-                        "intent": classification.intent.value,
-                        "confidence": classification.confidence
-                    }
-                }
+        # Check for repeat issues (simple category-based for now)
+        is_repeat = False
+        repeat_count = 0
+        similar_issues = []
         
-        # Step 2: Risk Prediction (for solve_problem and human_escalation intents)
+        # Log repeat detection to CloudWatch
+        log_repeat_detection(
+            request_id=request_id,
+            resident_id=request.resident_id,
+            category=final_category.value,
+            is_repeat=is_repeat,
+            repeat_count=repeat_count,
+            similarity_scores=[],
+            method='disabled'
+        )
+        
+        # Risk Prediction
         risk_result = None
         risk_score = None
         try:
@@ -143,10 +115,18 @@ async def submit_request(request: MessageRequest):
             risk_result = await predict_risk(classification_for_risk)
             risk_score = risk_result.risk_forecast
             logger.info(f"Risk prediction successful: {risk_score:.4f}")
+            
+            # Log risk assessment to CloudWatch
+            risk_level = "High" if risk_score > 0.7 else "Medium" if risk_score > 0.3 else "Low"
+            log_risk_assessment(
+                request_id=request_id,
+                risk_score=risk_score,
+                risk_level=risk_level
+            )
         except Exception as risk_error:
             logger.warning(f"Risk prediction failed (non-critical): {risk_error}")
         
-        # Step 3: Simulation - Generate resolution options
+        # Generate resolution options
         simulation_result = None
         simulated_options = None
         llm_generation_failed = False
@@ -274,7 +254,6 @@ async def submit_request(request: MessageRequest):
                 "action_required": "Please escalate this request to a human administrator using the 'Escalate to Human' option."
             }
         
-        request_id = generate_request_id()
         now = datetime.now(timezone.utc)
         
         resident_request = ResidentRequest(
@@ -353,6 +332,14 @@ async def submit_request(request: MessageRequest):
                 "recommended_option_id": recommended_option_id
             }
             
+            # Log simulation to CloudWatch
+            log_simulation_result(
+                request_id=request_id,
+                option_count=len(simulation_result.options),
+                recommended_option_id=recommended_option_id,
+                is_repeat=False
+            )
+            
             # Store recommended option in database
             if recommended_option_id:
                 from app.services.database import get_table
@@ -368,8 +355,32 @@ async def submit_request(request: MessageRequest):
                 except Exception as e:
                     logger.warning(f"Failed to update recommended option: {e}")
         
+        # Log final request submission to CloudWatch
+        processing_time = (time.time() - start_time) * 1000
+        log_request_submission(
+            request_id=request_id,
+            resident_id=request.resident_id,
+            category=final_category.value,
+            urgency=final_urgency.value,
+            confidence=classification.confidence,
+            message_preview=request.message_text[:100]
+        )
+        
+        logger.info(f"Request {request_id} processed in {processing_time:.2f}ms")
+        
         return response_data
     except Exception as e:
+        # Log error to CloudWatch
+        log_error(
+            error_type=type(e).__name__,
+            error_message=str(e),
+            context={
+                'request_id': request_id if 'request_id' in locals() else 'unknown',
+                'resident_id': request.resident_id,
+                'endpoint': '/submit-request'
+            }
+        )
+        logger.error(f"Error processing request: {e}")
         raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
 
 
