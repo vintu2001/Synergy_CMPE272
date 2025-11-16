@@ -28,16 +28,18 @@ logger.info(f"RAG Retriever module loaded - {RETRIEVER_VERSION}")
 
 # Query expansion dictionary for common abbreviations and synonyms
 QUERY_EXPANSIONS = {
-    "ac": ["air conditioning", "HVAC", "cooling system", "climate control"],
-    "hvac": ["heating ventilation air conditioning", "climate control", "AC"],
-    "fridge": ["refrigerator", "cooling appliance"],
-    "dishwasher": ["dish washer", "dishwashing machine"],
-    "washer": ["washing machine", "laundry machine"],
-    "dryer": ["drying machine", "laundry dryer"],
-    "hot water": ["water heater", "hot water heater"],
-    "leak": ["leaking", "water leak", "drip", "dripping"],
-    "broken": ["not working", "malfunction", "failure", "damaged"],
-    "noisy": ["loud", "noise", "making noise"],
+    "ac": ["air conditioning", "HVAC", "cooling system", "climate control", "maintenance", "repair", "service"],
+    "hvac": ["heating ventilation air conditioning", "climate control", "AC", "maintenance", "repair"],
+    "fridge": ["refrigerator", "cooling appliance", "appliance", "maintenance"],
+    "dishwasher": ["dish washer", "dishwashing machine", "appliance", "maintenance"],
+    "washer": ["washing machine", "laundry machine", "appliance", "maintenance"],
+    "dryer": ["drying machine", "laundry dryer", "appliance", "maintenance"],
+    "hot water": ["water heater", "hot water heater", "plumbing", "maintenance"],
+    "leak": ["leaking", "water leak", "drip", "dripping", "plumbing", "maintenance", "repair"],
+    "broken": ["not working", "malfunction", "failure", "damaged", "repair", "maintenance", "service request"],
+    "noisy": ["loud", "noise", "making noise", "disturbance", "complaint"],
+    "maintenance": ["repair", "service", "fix", "maintenance request", "work order"],
+    "issue": ["problem", "request", "maintenance", "repair"],
 }
 
 
@@ -173,7 +175,10 @@ class RAGRetriever:
         
         # Use provided values or defaults
         k = top_k if top_k is not None else self.top_k
+        # If threshold is explicitly provided, use it; otherwise use default
+        # This allows callers to override the default threshold
         threshold = similarity_threshold if similarity_threshold is not None else self.similarity_threshold
+        logger.info(f"Using similarity threshold: {threshold} (provided: {similarity_threshold}, default: {self.similarity_threshold})")
         
         # Default to retrieving policies, SOPs, and catalogs for simulation
         if doc_types is None:
@@ -185,8 +190,27 @@ class RAGRetriever:
             # Expand query with synonyms for better matching
             expanded_query = self.expand_query(query)
             
+            # Enhance query with category context if provided (helps match policy documents)
+            # Strategy: Add policy/procedure terms that appear in actual KB documents
+            if category:
+                # Add category-related terms to improve semantic matching
+                category_terms = {
+                    "maintenance": ["maintenance request", "repair", "service", "work order", "policy", "procedure", "SLA", "service level agreement", "vendor", "technician", "HVAC", "plumbing", "electrical"],
+                    "billing": ["rent payment", "billing", "payment", "policy", "procedure", "fee", "charge", "due date"],
+                    "security": ["security", "access", "key", "policy", "procedure", "lock", "entry", "visitor"],
+                    "deliveries": ["package", "delivery", "mail", "policy", "procedure", "parcel", "mailroom"],
+                    "amenities": ["amenity", "pool", "fitness", "policy", "procedure", "gym", "facility", "reservation"],
+                }
+                if category.lower() in category_terms:
+                    enhanced_query = f"{expanded_query} {' '.join(category_terms[category.lower()])}"
+                    logger.info(f"Enhanced query with category context: '{enhanced_query[:100]}...'")
+                else:
+                    enhanced_query = f"{expanded_query} policy procedure SOP service level agreement"
+            else:
+                enhanced_query = f"{expanded_query} policy procedure SOP service level agreement"
+            
             # Generate query embedding
-            query_embedding = self.embedding_model.encode(expanded_query).tolist()
+            query_embedding = self.embedding_model.encode(enhanced_query).tolist()
             logger.info(f"Generated query embedding with {len(query_embedding)} dimensions")
             
             # Build metadata filters
@@ -354,9 +378,11 @@ class RAGRetriever:
                 "building_id": {"$in": [building_id, "all_buildings"]}
             })
         else:
-            # No building_id: retrieve global/general documents
-            logger.info("No building_id provided, retrieving global documents")
-            # Don't add building filter - will retrieve all buildings
+            # No building_id: retrieve global/general documents (all_buildings)
+            logger.info("No building_id provided, retrieving global documents (all_buildings)")
+            filter_conditions.append({
+                "building_id": {"$in": ["all_buildings"]}
+            })
         
         # Document type filter
         if doc_types:
