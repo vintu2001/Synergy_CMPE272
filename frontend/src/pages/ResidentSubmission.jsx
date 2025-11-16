@@ -41,6 +41,7 @@ export default function ResidentSubmission() {
   const [submittedResult, setSubmittedResult] = useState(null);
   const [selectingOption, setSelectingOption] = useState(false);
   const debounceRef = useRef(null);
+  const abortControllerRef = useRef(null);
   
   // NEW: State for option selection flow - allow multiple options to be expanded
   const [expandedOptions, setExpandedOptions] = useState(new Set()); // Track which options' details are expanded
@@ -122,30 +123,82 @@ export default function ResidentSubmission() {
   }, [residentId, setValue]);
 
   useEffect(() => {
-    if (!messageText || messageText.trim().length < 10 || !residentId) {
+    // Don't classify if message is too short or resident not set
+    if (!messageText || messageText.trim().length < 15 || !residentId) {
       setAnalysis(null);
       setError("");
       return;
     }
 
+    // Cancel any in-flight request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    // Clear any existing timeout
     if (debounceRef.current) clearTimeout(debounceRef.current);
+    
+    // Create new abort controller for this request
+    abortControllerRef.current = new AbortController();
+    const signal = abortControllerRef.current.signal;
+    
+    // Set a longer debounce (2 seconds) - only classify when user stops typing
     debounceRef.current = setTimeout(async () => {
+      // Double-check message hasn't changed (user might have typed more)
+      const currentMessage = messageText.trim();
+      if (currentMessage.length < 15) {
+        setAnalyzing(false);
+        return;
+      }
+
+      // Check if request was cancelled
+      if (signal.aborted) {
+        return;
+      }
+
       try {
         setAnalyzing(true);
         setError("");
-        const res = await classifyMessage(residentId, messageText);
-        setAnalysis(res);
-        setValue("category", res.category);
-        setValue("urgency", res.urgency);
-        setValue("intent", res.intent);
+        const res = await classifyMessage(residentId, currentMessage, { signal });
+        
+        // Check again if request was cancelled during API call
+        if (signal.aborted) {
+          return;
+        }
+        
+        // Only update if message hasn't changed during the API call
+        if (messageText.trim() === currentMessage) {
+          setAnalysis(res);
+          setValue("category", res.category);
+          setValue("urgency", res.urgency);
+          setValue("intent", res.intent);
+        }
       } catch (e) {
-        setError("We couldn't analyze the message. Check your connection and try again.");
+        // Ignore abort errors
+        if (e.name === 'AbortError' || e.name === 'CanceledError' || signal.aborted) {
+          return;
+        }
+        
+        // Only show error if message hasn't changed and not aborted
+        if (messageText.trim() === currentMessage && !signal.aborted) {
+          setError("We couldn't analyze the message. Check your connection and try again.");
+        }
       } finally {
-        setAnalyzing(false);
+        if (!signal.aborted) {
+          setAnalyzing(false);
+        }
       }
-    }, 450);
+    }, 2000); // 2 seconds - wait for user to stop typing
 
-    return () => clearTimeout(debounceRef.current);
+    return () => {
+      // Cancel request on cleanup
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    };
   }, [messageText, residentId, setValue]);
 
   const handleSubmit = async () => {
@@ -470,8 +523,8 @@ export default function ResidentSubmission() {
                   </div>
                   
                   {/* Sources */}
-                  {submittedResult.answer.sources && submittedResult.answer.sources.length > 0 && (
-                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900/50">
+                  {((submittedResult.answer.source_docs || submittedResult.answer.sources)?.length > 0) && (
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900/50 mt-4">
                       <div className="flex items-center gap-2 mb-2">
                         <Info className="h-4 w-4 text-blue-500" />
                         <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
@@ -479,13 +532,13 @@ export default function ResidentSubmission() {
                         </p>
                       </div>
                       <div className="space-y-2">
-                        {submittedResult.answer.sources.map((source, idx) => (
+                        {(submittedResult.answer.source_docs || submittedResult.answer.sources || []).map((source, idx) => (
                           <div key={idx} className="rounded border border-slate-200 bg-white p-2 dark:border-slate-700 dark:bg-slate-950">
                             <p className="text-[10px] font-mono text-blue-600 dark:text-blue-400 mb-1">
-                              {source.doc_id}
+                              {source.doc_id || `Source ${idx + 1}`}
                             </p>
                             <p className="text-xs text-slate-600 dark:text-slate-400">
-                              {source.text}
+                              {source.text || source}
                             </p>
                           </div>
                         ))}
