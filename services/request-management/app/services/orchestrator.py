@@ -49,7 +49,17 @@ async def submit_request(request: MessageRequest):
     request_id = generate_request_id()
     
     try:
-        logger.info(f"Processing request for resident: {request.resident_id}")
+        from app.utils.cloudwatch_logger import log_to_cloudwatch
+        
+        # Log detailed request submission
+        log_to_cloudwatch('request_submitted', {
+            'request_id': request_id,
+            'resident_id': request.resident_id,
+            'message_preview': request.message_text[:100] if len(request.message_text) > 100 else request.message_text,
+            'message_length': len(request.message_text)
+        })
+        
+        logger.info(f"Processing request {request_id} for resident: {request.resident_id}")
         _normalized_text = normalize_text(request.message_text)
         
         # Classification
@@ -74,6 +84,16 @@ async def submit_request(request: MessageRequest):
         final_urgency = request.urgency if request.urgency else Urgency(classification_data["urgency"])
         intent = Intent(classification_data["intent"])
         confidence = classification_data["confidence"]
+        
+        # Log classification results
+        log_to_cloudwatch('request_classified', {
+            'request_id': request_id,
+            'resident_id': request.resident_id,
+            'category': final_category.value,
+            'urgency': final_urgency.value,
+            'intent': intent.value,
+            'confidence': round(confidence, 3)
+        })
         
         # Handle ANSWER_QUESTION intent - return direct answer via RAG
         if intent == Intent.ANSWER_QUESTION:
@@ -359,6 +379,20 @@ async def submit_request(request: MessageRequest):
         processing_time = (time.time() - start_time) * 1000
         logger.info(f"Request {request_id} processed in {processing_time:.2f}ms")
         
+        # Log request completion summary
+        log_to_cloudwatch('request_completed', {
+            'request_id': request_id,
+            'resident_id': request.resident_id,
+            'category': final_category.value,
+            'urgency': final_urgency.value,
+            'intent': intent.value,
+            'risk_score': round(risk_score, 3) if risk_score else None,
+            'options_count': len(simulated_options) if simulated_options else 0,
+            'recommended_option': recommended_option_id,
+            'processing_time_ms': round(processing_time, 2),
+            'status': 'success'
+        })
+        
         return {
             "status": "submitted",
             "message": "Request submitted successfully!",
@@ -393,6 +427,8 @@ async def select_option(selection: SelectOptionRequest):
     This triggers execution.
     """
     try:
+        from app.utils.cloudwatch_logger import log_to_cloudwatch
+        
         # Get the request
         request = get_request_by_id(selection.request_id)
         if not request:
@@ -400,6 +436,12 @@ async def select_option(selection: SelectOptionRequest):
         
         # Special handling for human escalation
         if selection.selected_option_id == "escalate_to_human":
+            log_to_cloudwatch('request_escalated', {
+                'request_id': selection.request_id,
+                'escalation_type': 'manual',
+                'reason': 'User selected escalation option'
+            })
+            
             table = get_table()
             table.update_item(
                 Key={'request_id': selection.request_id},
@@ -437,6 +479,15 @@ async def select_option(selection: SelectOptionRequest):
         
         if not selected_option:
             raise HTTPException(status_code=400, detail="Invalid option ID")
+        
+        # Log option selection to CloudWatch
+        log_to_cloudwatch('option_selected', {
+            'request_id': selection.request_id,
+            'selected_option_id': selection.selected_option_id,
+            'option_action': selected_option.get('action', 'Unknown')[:100],
+            'estimated_cost': selected_option.get('estimated_cost'),
+            'estimated_time': selected_option.get('estimated_time')
+        })
         
         # Update request with user's selection
         table = get_table()
@@ -498,6 +549,8 @@ async def resolve_request(resolve_data: ResolveRequestModel):
     Mark a request as resolved by admin or resident.
     """
     try:
+        from app.utils.cloudwatch_logger import log_to_cloudwatch
+        
         # Get the request
         request = get_request_by_id(resolve_data.request_id)
         if not request:
@@ -521,6 +574,13 @@ async def resolve_request(resolve_data: ResolveRequestModel):
         )
         
         logger.info(f"Request {resolve_data.request_id} marked as resolved by {resolve_data.resolved_by}")
+        
+        # Log resolution to CloudWatch
+        log_to_cloudwatch('request_resolved', {
+            'request_id': resolve_data.request_id,
+            'resolved_by': resolve_data.resolved_by,
+            'resolution_notes': resolve_data.resolution_notes[:100] if resolve_data.resolution_notes else None
+        })
         
         return {
             "status": "success",

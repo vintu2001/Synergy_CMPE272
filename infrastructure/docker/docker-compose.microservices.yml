@@ -15,6 +15,9 @@ services:
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_DYNAMODB_TABLE_NAME=${AWS_DYNAMODB_TABLE_NAME:-aam_requests}
       - AWS_SQS_QUEUE_URL=${AWS_SQS_QUEUE_URL}
+      - AWS_CLOUDWATCH_LOG_GROUP=${AWS_CLOUDWATCH_LOG_GROUP:-/aws/apartment-manager/application}
+      - AWS_CLOUDWATCH_LOG_STREAM=request-management
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - AI_PROCESSING_SERVICE_URL=http://ai-processing:8002
       - DECISION_SIMULATION_SERVICE_URL=http://decision-simulation:8003
       - EXECUTION_SERVICE_URL=http://execution:8004
@@ -42,6 +45,11 @@ services:
       - PORT=8002
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - AWS_REGION=${AWS_REGION:-us-west-2}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_CLOUDWATCH_LOG_GROUP=${AWS_CLOUDWATCH_LOG_GROUP:-/aws/apartment-manager/application}
+      - AWS_CLOUDWATCH_LOG_STREAM=ai-processing
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
@@ -67,6 +75,11 @@ services:
       - RAG_TOP_K=5
       - RAG_SIMILARITY_THRESHOLD=0.7
       - AWS_REGION=${AWS_REGION:-us-west-2}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_CLOUDWATCH_LOG_GROUP=${AWS_CLOUDWATCH_LOG_GROUP:-/aws/apartment-manager/application}
+      - AWS_CLOUDWATCH_LOG_STREAM=decision-simulation
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - REQUEST_MANAGEMENT_SERVICE_URL=http://request-management:8001
       - ADMIN_API_KEY=${ADMIN_API_KEY:-test-admin-key}
     volumes:
@@ -93,6 +106,9 @@ services:
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_SQS_QUEUE_URL=${AWS_SQS_QUEUE_URL}
+      - AWS_CLOUDWATCH_LOG_GROUP=${AWS_CLOUDWATCH_LOG_GROUP:-/aws/apartment-manager/application}
+      - AWS_CLOUDWATCH_LOG_STREAM=execution
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8004/health')"]
