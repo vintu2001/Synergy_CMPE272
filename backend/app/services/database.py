@@ -50,6 +50,8 @@ def create_request(request: ResidentRequest) -> bool:
             item['created_at'] = item['created_at'].isoformat()
         if 'updated_at' in item and isinstance(item['updated_at'], datetime):
             item['updated_at'] = item['updated_at'].isoformat()
+        if 'resolved_at' in item and isinstance(item['resolved_at'], datetime):
+            item['resolved_at'] = item['resolved_at'].isoformat()
         table.put_item(Item=item)
         return True
     except ClientError as e:

@@ -129,11 +129,32 @@ async def submit_request(request: MessageRequest):
         # Generate resolution options
         simulation_result = None
         simulated_options = None
+        llm_generation_failed = False
+        llm_error_message = None
+        
         try:
-            simulation_options = simulator.generate_options(
+            # Get resident history for context
+            from app.services.database import get_requests_by_resident
+            resident_history = get_requests_by_resident(request.resident_id)
+            resident_history_dicts = [
+                {
+                    'category': req.category.value if hasattr(req.category, 'value') else str(req.category),
+                    'urgency': req.urgency.value if hasattr(req.urgency, 'value') else str(req.urgency),
+                    'message_text': req.message_text,
+                    'status': req.status.value if hasattr(req.status, 'value') else str(req.status),
+                    'created_at': req.created_at.isoformat() if isinstance(req.created_at, datetime) else str(req.created_at)
+                }
+                for req in resident_history[-5:]  # Last 5 requests
+            ]
+            
+            # Generate options using AGENTIC approach (LLM + Tools)
+            simulation_options = await simulator.generate_options(
                 category=final_category,
                 urgency=final_urgency,
-                risk_score=risk_score if risk_score is not None else 0.5
+                message_text=request.message_text,
+                resident_id=request.resident_id,
+                risk_score=risk_score if risk_score is not None else 0.5,
+                resident_history=resident_history_dicts if resident_history_dicts else None
             )
             
             # Convert to dict for storage
@@ -142,19 +163,96 @@ async def submit_request(request: MessageRequest):
                     "option_id": opt.option_id,
                     "action": opt.action,
                     "estimated_cost": opt.estimated_cost,
-                    "time_to_resolution": opt.time_to_resolution,
-                    "resident_satisfaction_impact": opt.resident_satisfaction_impact
+                    "estimated_time": opt.estimated_time,
+                    "reasoning": opt.reasoning,
+                    "source_doc_ids": opt.source_doc_ids,
+                    "resident_satisfaction_impact": opt.resident_satisfaction_impact,
+                    "steps": opt.steps
                 }
                 for opt in simulation_options
             ]
             
             simulation_result = SimulationResponse(
                 options=simulation_options,
-                issue_id=f"sim_{final_category.value}_{final_urgency.value}"
+                issue_id=f"agentic_{final_category.value}_{final_urgency.value}_{request.resident_id}"
             )
-            logger.info(f"Simulation generated {len(simulated_options)} options")
+            logger.info(f"Agentic simulation generated {len(simulated_options)} options")
+        
+        except HTTPException as http_error:
+            # LLM generation failed - capture error for user display
+            llm_generation_failed = True
+            error_detail = http_error.detail if isinstance(http_error.detail, dict) else {'user_message': str(http_error.detail)}
+            llm_error_message = error_detail.get('user_message', 'Unable to generate resolution options.')
+            logger.error(f"LLM generation failed: {llm_error_message}")
+        
         except Exception as sim_error:
-            logger.warning(f"Simulation failed (non-critical): {sim_error}")
+            # Unexpected error
+            llm_generation_failed = True
+            llm_error_message = 'We encountered an unexpected error while analyzing your request. Please escalate this issue to a human administrator.'
+            logger.error(f"Simulation failed with unexpected error: {sim_error}")
+        
+        # If LLM generation failed, still create request in database for escalation
+        if llm_generation_failed:
+            request_id = generate_request_id()
+            now = datetime.now(timezone.utc)
+            
+            # Create request with status SUBMITTED (will be escalated when user selects escalation)
+            resident_request = ResidentRequest(
+                request_id=request_id,
+                resident_id=request.resident_id,
+                message_text=request.message_text,
+                category=final_category,
+                urgency=final_urgency,
+                intent=classification.intent,
+                status=Status.SUBMITTED,
+                risk_forecast=risk_score,
+                classification_confidence=classification.confidence,
+                simulated_options=None,  # No options generated
+                created_at=now,
+                updated_at=now
+            )
+            
+            success = create_request(resident_request)
+            if not success:
+                logger.error(f"Failed to create request for LLM failure case: {request_id}")
+            
+            # Send to SQS if available
+            if sqs and SQS_URL:
+                try:
+                    payload = {
+                        "request_id": request_id,
+                        "resident_id": request.resident_id,
+                        "message_text": request.message_text,
+                        "category": final_category.value,
+                        "urgency": final_urgency.value,
+                        "intent": classification.intent.value,
+                        "risk_forecast": risk_score,
+                        "simulated_options": None,
+                        "submitted_at": now.isoformat(),
+                        "llm_generation_failed": True
+                    }
+                    sqs.send_message(QueueUrl=SQS_URL, MessageBody=json.dumps(payload))
+                except Exception as sqs_error:
+                    logger.warning(f"SQS enqueue failed for LLM error case (non-critical): {sqs_error}")
+            
+            return {
+                "status": "error",
+                "error_type": "LLM_GENERATION_FAILED",
+                "message": llm_error_message,
+                "escalation_required": True,
+                "request_id": request_id,  # Include request_id so frontend can escalate
+                "classification": {
+                    "category": final_category.value,
+                    "urgency": final_urgency.value,
+                    "intent": classification.intent.value,
+                    "confidence": classification.confidence
+                },
+                "risk_assessment": {
+                    "risk_forecast": risk_score,
+                    "risk_level": "High" if risk_score and risk_score > 0.7 else "Medium" if risk_score and risk_score > 0.3 else "Low" if risk_score else "Unknown"
+                } if risk_score is not None else None,
+                "action_required": "Please escalate this request to a human administrator using the 'Escalate to Human' option."
+            }
         
         now = datetime.now(timezone.utc)
         
@@ -290,7 +388,7 @@ async def submit_request(request: MessageRequest):
 async def select_option(selection: SelectOptionRequest):
     """
     Resident selects an option from the 3 simulated options, or escalates to human.
-    This triggers execution and governance logging.
+    This triggers execution.
     """
     try:
         from app.services.database import get_table, get_request_by_id
@@ -323,8 +421,8 @@ async def select_option(selection: SelectOptionRequest):
                     "option_id": "escalate_to_human",
                     "action": "Escalate to Human Support",
                     "estimated_cost": 0,
-                    "time_to_resolution": 24.0,
-                    "resident_satisfaction_impact": 0.95
+                    "estimated_time": 24.0,
+                    "reasoning": "Manual escalation requested by resident"
                 }
             }
         
@@ -359,55 +457,9 @@ async def select_option(selection: SelectOptionRequest):
             "status": "executed",
             "action_taken": selected_option['action'],
             "estimated_cost": selected_option['estimated_cost'],
-            "estimated_time": selected_option['time_to_resolution'],
+            "estimated_time": selected_option.get('estimated_time', selected_option.get('time_to_resolution', 1.0)),
             "message": f"Executing: {selected_option['action']}"
         }
-        
-        # Log to governance system
-        try:
-            from app.models.schemas import DecisionResponse, ClassificationResponse, IssueCategory, Urgency, Intent
-            
-            # Create a decision response from user's selection
-            decision_result = DecisionResponse(
-                chosen_action=selected_option['action'],
-                chosen_option_id=selection.selected_option_id,
-                reasoning=f"User selected this option from {len(simulated_options)} available options.",
-                alternatives_considered=[opt['option_id'] for opt in simulated_options if opt['option_id'] != selection.selected_option_id],
-                policy_scores={opt['option_id']: 0.0 for opt in simulated_options},
-                escalation_reason=None
-            )
-            
-            # Reconstruct classification
-            classification = ClassificationResponse(
-                category=IssueCategory(request['category']),
-                urgency=Urgency(request['urgency']),
-                intent=Intent(request['intent']),
-                confidence=request.get('classification_confidence', 0.9),
-                message_text=request.get('message_text', '')
-            )
-            
-            # Log decision
-            estimated_cost = selected_option['estimated_cost']
-            estimated_time = selected_option['time_to_resolution']
-            config = PolicyConfiguration()
-            
-            await log_decision(
-                request_id=selection.request_id,
-                resident_id=request['resident_id'],
-                decision=decision_result,
-                classification=classification,
-                risk_score=request.get('risk_forecast'),
-                total_options_simulated=len(simulated_options),
-                estimated_cost=estimated_cost,
-                estimated_time=estimated_time,
-                exceeds_budget_threshold=estimated_cost > config.max_cost,
-                exceeds_time_threshold=estimated_time > config.max_time,
-                policy_weights=PolicyWeights().dict()
-            )
-            
-            logger.info(f"User selection logged to governance for request {selection.request_id}")
-        except Exception as gov_error:
-            logger.warning(f"Governance logging failed (non-critical): {gov_error}")
         
         return {
             "status": "success",

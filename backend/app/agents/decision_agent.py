@@ -1,5 +1,5 @@
 """
-Decision Agent - Ticket 13
+Decision Agent
 Evaluates simulated options, checks for human escalation, and selects optimal action using a policy-based scoring system.
 """
 from fastapi import APIRouter, HTTPException, Body, Query
@@ -9,10 +9,12 @@ from app.models.schemas import (
     PolicyWeights, DecisionReasoning, SimulatedOption, PolicyConfiguration,
     CostAnalysis, TimeAnalysis, DecisionRequest, DecisionResponseWithStatus
 )
+from app.rag.retriever import retrieve_decision_rules  # RAG integration
 from datetime import datetime
 import time
 import logging
-from typing import List, Dict, Tuple
+import os
+from typing import List, Dict, Tuple, Optional
 from statistics import mean
 
 logger = logging.getLogger(__name__)
@@ -26,7 +28,8 @@ router = APIRouter()
 
 def create_escalation_decision(
     classification: ClassificationResponse,
-    reason: str = "Resident explicitly requested human contact"
+    reason: str = "Resident explicitly requested human contact",
+    rule_sources: Optional[List[str]] = None
 ) -> DecisionResponse:
     """Creates a decision response for human escalation cases."""
     return DecisionResponse(
@@ -35,7 +38,8 @@ def create_escalation_decision(
         reasoning=reason,
         alternatives_considered=[],
         escalation_reason=reason,
-        policy_scores={"escalation": 1.0}
+        policy_scores={"escalation": 1.0},
+        rule_sources=rule_sources
     )
 
 
@@ -64,15 +68,15 @@ def analyze_times(
 ) -> List[TimeAnalysis]:
     """Analyze resolution times for all options and generate time analysis report."""
     # Calculate max actual time for scaling
-    max_actual_time = max((opt.time_to_resolution for opt in options), default=1.0)
+    max_actual_time = max((opt.estimated_time for opt in options), default=1.0)
     scaling_factor = config.max_time / max_actual_time if max_actual_time > 0 else 1.0
     
     return [
         TimeAnalysis(
             option_id=opt.option_id,
-            estimated_time=opt.time_to_resolution,
-            exceeds_scale=opt.time_to_resolution > config.max_time,
-            scaled_time=opt.time_to_resolution * scaling_factor
+            estimated_time=opt.estimated_time,
+            exceeds_scale=opt.estimated_time > config.max_time,
+            scaled_time=opt.estimated_time * scaling_factor
         )
         for opt in options
     ]
@@ -100,12 +104,12 @@ def calculate_raw_score(
     scaled_cost = option.estimated_cost * cost_scaling_factor
     
     time_scaling_factor = config.max_time / max_actual_time if max_actual_time > 0 else 1.0
-    scaled_time = option.time_to_resolution * time_scaling_factor
+    scaled_time = option.estimated_time * time_scaling_factor
     
     # Calculate scores using scaled values
     cost_score = 1.0 - (scaled_cost / config.max_cost)
     time_score = 1.0 - (scaled_time / config.max_time)
-    satisfaction_score = option.resident_satisfaction_impact
+    satisfaction_score = 0.7  # Default satisfaction score since field removed
 
     # Calculate raw weighted score without capping
     raw_score = (
@@ -138,14 +142,14 @@ def generate_factor_breakdown(
     cost_score = 1.0 - (scaled_cost / config.max_cost)
     
     time_scaling_factor = config.max_time / max_actual_time if max_actual_time > 0 else 1.0
-    scaled_time = option.time_to_resolution * time_scaling_factor
+    scaled_time = option.estimated_time * time_scaling_factor
     time_score = 1.0 - (scaled_time / config.max_time)
     
     return {
         "urgency_contribution": weights.urgency_weight * urgency_factor,
         "cost_contribution": weights.cost_weight * cost_score,
         "time_contribution": weights.time_weight * time_score,
-        "satisfaction_contribution": weights.satisfaction_weight * option.resident_satisfaction_impact
+        "satisfaction_contribution": weights.satisfaction_weight * 0.7  # Default satisfaction
     }
 
 def generate_comparative_analysis(
@@ -171,7 +175,7 @@ def generate_comparative_analysis(
         next_best = next((opt for opt, s in sorted_options if opt.option_id != option.option_id), None)
         if next_best:
             cost_diff = option.estimated_cost - next_best.estimated_cost
-            time_diff = option.time_to_resolution - next_best.time_to_resolution
+            time_diff = option.estimated_time - next_best.estimated_time
             
             if cost_diff < 0:
                 comparative_insights.append(
@@ -202,7 +206,7 @@ def generate_decision_reasoning(
     
     # Get factor breakdown
     max_actual_cost = max((opt.estimated_cost for opt in all_options), default=1.0)
-    max_actual_time = max((opt.time_to_resolution for opt in all_options), default=1.0)
+    max_actual_time = max((opt.estimated_time for opt in all_options), default=1.0)
     factor_breakdown = generate_factor_breakdown(
         option, classification.urgency.value,
         max_actual_cost, max_actual_time,
@@ -236,7 +240,7 @@ def generate_decision_reasoning(
             considerations.append(
                 f"- {opt.action} (score: {alt_score:.2f}, "
                 f"cost: ${opt.estimated_cost:.2f}, "
-                f"time: {opt.time_to_resolution:.1f}h)"
+                f"time: {opt.estimated_time:.1f}h)"
             )
     
     # Check thresholds
@@ -259,7 +263,7 @@ def generate_decision_reasoning(
         cost_analysis=cost_analysis,
         time_analysis=time_analysis,
         total_estimated_cost=option.estimated_cost,
-        total_estimated_time=option.time_to_resolution,
+        total_estimated_time=option.estimated_time,
         exceeds_budget_threshold=exceeds_cost_threshold,
         exceeds_time_threshold=exceeds_time_threshold
     )
@@ -319,8 +323,8 @@ async def make_decision(
                             "option_id": "opt1",
                             "action": "Replace filter",
                             "estimated_cost": 100.0,
-                            "time_to_resolution": 2.0,
-                            "resident_satisfaction_impact": 0.8
+                            "estimated_time": 2.0,
+                            "reasoning": "Standard HVAC filter replacement procedure"
                         }],
                         "issue_id": "test_issue"
                     }
@@ -336,9 +340,55 @@ async def make_decision(
     start_time = time.time()
     
     try:
-        # Check for human escalation intent
+        # Step 1: Retrieve decision rules from knowledge base (RAG integration)
+        rag_context = None
+        rule_sources = []
+        
+        # Check if RAG is enabled
+        rag_enabled = os.getenv('RAG_ENABLED', 'false').lower() == 'true'
+        
+        if rag_enabled:
+            try:
+                # Build query for policy rules
+                query_parts = [
+                    f"{request.classification.category.value}",
+                    f"{request.classification.urgency.value} urgency",
+                    "policy rules thresholds requirements"
+                ]
+                rule_query = " ".join(query_parts)
+                
+                # Retrieve policy documents for decision rules
+                rag_context = await retrieve_decision_rules(
+                    query=rule_query,
+                    category=request.classification.category.value,
+                    urgency=request.classification.urgency.value,
+                    building_id=None,  # Will be extracted from options if available
+                    top_k=3  # Fewer documents for decision agent (higher precision)
+                )
+                
+                if rag_context and rag_context.retrieved_docs:
+                    rule_sources = [doc['doc_id'] for doc in rag_context.retrieved_docs if 'doc_id' in doc]
+                    logger.info(f"RAG retrieval successful: {len(rule_sources)} policy rules retrieved")
+                    
+                    # Log retrieved rules for audit trail
+                    for doc in rag_context.retrieved_docs:
+                        logger.debug(f"Retrieved rule: {doc.get('doc_id', 'N/A')} (score: {doc.get('score', 0):.3f})")
+                else:
+                    logger.info("RAG retrieval returned no rules")
+                    
+            except Exception as e:
+                logger.warning(f"RAG retrieval failed: {e}. Continuing with default policy scoring.")
+                rag_context = None
+                rule_sources = []
+        else:
+            logger.info("RAG is disabled (RAG_ENABLED=false)")
+        
+        # Step 2: Check for human escalation intent
         if request.classification.intent == Intent.HUMAN_ESCALATION:
-            response = create_escalation_decision(request.classification)
+            response = create_escalation_decision(
+                request.classification,
+                rule_sources=rule_sources if rule_sources else None
+            )
             return DecisionResponseWithStatus(
                 **response.dict(),
                 processing_time=time.time() - start_time
@@ -351,7 +401,7 @@ async def make_decision(
             )
         
         max_actual_cost = max((opt.estimated_cost for opt in request.simulation.options), default=1.0)
-        max_actual_time = max((opt.time_to_resolution for opt in request.simulation.options), default=1.0)
+        max_actual_time = max((opt.estimated_time for opt in request.simulation.options), default=1.0)
 
         all_raw_scores = [
             calculate_raw_score(
@@ -397,7 +447,7 @@ async def make_decision(
         response_parts = [
             f"Selected {option.action} (score: {score:.2f})",
             f"Cost: ${option.estimated_cost:.2f}",
-            f"Estimated time: {option.time_to_resolution:.1f}h"
+            f"Estimated time: {option.estimated_time:.1f}h"
         ]
         
         # Add urgency context
@@ -421,6 +471,10 @@ async def make_decision(
         if warnings:
             response_parts.append(f"Warning: {' and '.join(warnings)}")
         
+        # Add RAG context if rules were used
+        if rule_sources:
+            response_parts.append(f"Based on {len(rule_sources)} policy rule(s)")
+        
         response_reasoning = ". ".join(response_parts)
         
         return DecisionResponseWithStatus(
@@ -430,6 +484,7 @@ async def make_decision(
             alternatives_considered=reasoning.considerations,
             policy_scores=reasoning.policy_scores,
             escalation_reason=None,
+            rule_sources=rule_sources if rule_sources else None,  # Include RAG sources
             processing_time=time.time() - start_time
         )
         

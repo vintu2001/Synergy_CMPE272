@@ -4,7 +4,7 @@ import { getResidentRequests, resolveRequest } from "../services/api";
 import LoadingSpinner from "../components/LoadingSpinner";
 import StatusBadge from "../components/StatusBadge";
 import Toast from "../components/Toast";
-import { Calendar, CheckCircle2, FileText, Filter, RefreshCw, User, UserCheck, X } from "lucide-react";
+import { Calendar, CheckCircle2, FileText, Filter, RefreshCw, User, UserCheck, X, Search } from "lucide-react";
 
 export default function ResidentDashboard() {
   const { residentId, residentName, setResidentId, setResidentName } = useUser();
@@ -13,14 +13,9 @@ export default function ResidentDashboard() {
   const [items, setItems] = useState([]);
   const [statusFilter, setStatusFilter] = useState("All");
   const [toast, setToast] = useState(null);
-  const [resolveModal, setResolveModal] = useState(null);
+  const [resolveModal, setResolveModal] = useState(null); // {requestId, requestText}
   const [resolutionNotes, setResolutionNotes] = useState("");
   const [resolving, setResolving] = useState(false);
-
-  const filteredItems = useMemo(
-    () => items.filter((item) => (statusFilter === "All" ? true : item.status === statusFilter)),
-    [items, statusFilter]
-  );
 
   async function load() {
     if (!residentId) {
@@ -46,19 +41,23 @@ export default function ResidentDashboard() {
 
   const handleResolve = async () => {
     if (!resolveModal) return;
+    
     setResolving(true);
     try {
       await resolveRequest(resolveModal.requestId, "resident", resolutionNotes || null);
-      setToast({ message: "Great! We've marked that request as resolved.", type: "success" });
+      setToast({ message: "Request marked as resolved!", type: "success" });
       setResolveModal(null);
       setResolutionNotes("");
+      // Reload requests
       load();
     } catch (e) {
-      setToast({ message: "We couldn't update the request. Please try again.", type: "error" });
+      setToast({ message: "Failed to resolve request. Please try again.", type: "error" });
     } finally {
       setResolving(false);
     }
   };
+
+  const filtered = items.filter((i) => (statusFilter === "All" ? true : i.status === statusFilter));
 
   return (
     <div className="w-full bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
@@ -131,8 +130,8 @@ export default function ResidentDashboard() {
             </div>
 
             <div className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-600 shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
-              Showing <span className="font-semibold text-slate-700 dark:text-slate-100">{filteredItems.length}</span>
-              {filteredItems.length === 1 ? "request" : "requests"}
+              Showing <span className="font-semibold text-slate-700 dark:text-slate-100">{filtered.length}</span>
+              {filtered.length === 1 ? "request" : "requests"}
               {statusFilter !== "All" && (
                 <span className="rounded-full bg-slate-200 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                   {statusFilter}
@@ -149,7 +148,7 @@ export default function ResidentDashboard() {
             <div className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700 shadow-sm dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200">
               {error}
             </div>
-          ) : filteredItems.length === 0 ? (
+          ) : filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white p-12 text-center shadow-sm dark:border-slate-800 dark:bg-slate-900">
               <FileText className="h-10 w-10 text-slate-400" />
               <p className="text-base font-semibold text-slate-700 dark:text-slate-200">No requests found</p>
@@ -175,7 +174,7 @@ export default function ResidentDashboard() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                    {filteredItems.map((item) => (
+                    {filtered.map((item) => (
                       <tr key={item.request_id} className="hover:bg-slate-50 dark:hover:bg-slate-800/60">
                         <td className="whitespace-nowrap px-6 py-4 font-mono text-xs text-slate-600 dark:text-slate-300">
                           {item.request_id}
@@ -234,54 +233,60 @@ export default function ResidentDashboard() {
       </section>
 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-
+      
+      {/* Resolve Modal */}
       {resolveModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-8 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
             <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Confirm resolution</h3>
+              <h3 className="text-xl font-bold text-gray-900">Mark as Resolved</h3>
               <button
                 onClick={() => {
                   setResolveModal(null);
                   setResolutionNotes("");
                 }}
-                className="rounded-full p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
+                className="rounded-lg p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
-
-            <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
-              {resolveModal.requestText}
+            
+            <div className="mb-4">
+              <p className="mb-2 text-sm text-gray-600">Request:</p>
+              <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-900">
+                {resolveModal.requestText}
+              </p>
             </div>
-
-            <label className="mb-3 block text-sm font-semibold text-slate-700 dark:text-slate-200">
-              Resolution notes (optional)
-            </label>
-            <textarea
-              rows={4}
-              className="mb-4 w-full rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-900 focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-400 dark:focus:ring-slate-800"
-              placeholder="How did you fix the issue?"
-              value={resolutionNotes}
-              onChange={(e) => setResolutionNotes(e.target.value)}
-            />
-
+            
+            <div className="mb-6">
+              <label className="mb-2 block text-sm font-semibold text-gray-700">
+                Resolution Notes (Optional)
+              </label>
+              <textarea
+                rows={4}
+                className="w-full rounded-lg border-2 border-gray-200 px-4 py-3 text-sm transition-all focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                placeholder="Add any notes about how the issue was resolved..."
+                value={resolutionNotes}
+                onChange={(e) => setResolutionNotes(e.target.value)}
+              />
+            </div>
+            
             <div className="flex gap-3">
               <button
                 onClick={() => {
                   setResolveModal(null);
                   setResolutionNotes("");
                 }}
-                className="flex-1 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-200 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800 dark:focus:ring-slate-700"
+                className="flex-1 rounded-lg border-2 border-gray-300 px-4 py-2 font-semibold text-gray-700 transition-all hover:bg-gray-50"
               >
                 Cancel
               </button>
               <button
                 onClick={handleResolve}
                 disabled={resolving}
-                className="flex-1 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200 disabled:opacity-60 dark:bg-emerald-400 dark:text-emerald-950 dark:hover:bg-emerald-300"
+                className="flex-1 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 px-4 py-2 font-semibold text-white shadow-md transition-all hover:from-green-600 hover:to-emerald-600 disabled:opacity-50"
               >
-                {resolving ? "Processing..." : "Mark resolved"}
+                {resolving ? "Processing..." : "Confirm Resolution"}
               </button>
             </div>
           </div>

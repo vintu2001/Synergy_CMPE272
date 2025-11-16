@@ -69,7 +69,7 @@ export default function SimulationTest() {
             <h1 className="text-2xl font-bold">Simulation Agent Test</h1>
           </div>
           <p className="mt-3 text-gray-600">
-            Test Ticket 11: Generate resolution options with SimPy simulation
+            Generate resolution options with SimPy simulation
           </p>
         </div>
 
