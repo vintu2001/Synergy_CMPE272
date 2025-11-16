@@ -52,7 +52,7 @@ async def submit_request(request: MessageRequest):
         logger.info(f"Processing request for resident: {request.resident_id}")
         _normalized_text = normalize_text(request.message_text)
         
-        # Step 1: Classification (AI Processing Service)
+        # Classification
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 classify_response = await client.post(
@@ -75,7 +75,7 @@ async def submit_request(request: MessageRequest):
         intent = Intent(classification_data["intent"])
         confidence = classification_data["confidence"]
         
-        # Step 1.5: Handle ANSWER_QUESTION intent - return direct answer via RAG
+        # Handle ANSWER_QUESTION intent - return direct answer via RAG
         if intent == Intent.ANSWER_QUESTION:
             logger.info(f"Intent is ANSWER_QUESTION - using RAG to answer directly")
             try:
@@ -134,7 +134,7 @@ async def submit_request(request: MessageRequest):
                 logger.error(f"Error answering question: {answer_error}")
                 # Fallback to normal flow
         
-        # Step 2: Risk Prediction (AI Processing Service)
+        # Risk Prediction
         risk_score = None
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
@@ -155,7 +155,7 @@ async def submit_request(request: MessageRequest):
         except Exception as risk_error:
             logger.warning(f"Risk prediction failed (non-critical): {risk_error}")
         
-        # Step 3: Generate Resolution Options (Decision & Simulation Service)
+        # Generate Resolution Options
         simulation_result = None
         simulated_options = None
         llm_generation_failed = False
@@ -314,7 +314,7 @@ async def submit_request(request: MessageRequest):
             except Exception as sqs_error:
                 logger.warning(f"SQS enqueue failed (non-critical): {sqs_error}")
         
-        # Step 4: Get AI recommendation (Decision & Simulation Service)
+        # Get AI recommendation
         recommended_option_id = None
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:

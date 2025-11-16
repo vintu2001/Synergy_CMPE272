@@ -74,8 +74,6 @@ class LLMClient:
     """Client for interacting with Gemini LLM for agentic decision-making."""
     
     def __init__(self):
-        # Using gemini-2.5-flash for faster generation
-        # Note: If this model is not available, it will fall back to available models
         self.model = genai.GenerativeModel('gemini-2.5-flash') if GEMINI_API_KEY else None
         self.enabled = GEMINI_API_KEY is not None
     
@@ -141,9 +139,8 @@ class LLMClient:
                 logger.info(f"LLM finish reason: {finish_reason}")
                 if finish_reason == 3:  # SAFETY
                     raise ValueError("Response blocked by safety filters")
-                elif finish_reason == 4:  # RECITATION
+                elif finish_reason == 4:
                     raise ValueError("Response blocked due to recitation")
-                # Note: finish_reason == 2 (MAX_TOKENS) is handled below - we'll try to parse anyway
             
             if not response or not response.text:
                 logger.error(f"Empty response from LLM. Response: {response}")
