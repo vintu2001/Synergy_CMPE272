@@ -60,13 +60,13 @@ export default function Home() {
           </p>
 
           <h1 className="text-4xl font-semibold leading-tight">
-            Smart, stress-free living for modern communities.
+            Synergy Agentic Apartment Manager
           </h1>
 
           <p className="text-base text-slate-100/90 max-w-xl">
-            Synergy connects residents and building managers in a single,
-            streamlined portal. Submit requests, track resolutions, and keep
-            your building running smoothly.
+            Synergy is is an autonomous, AI-driven system that functions as a proactive digital property manager for apartment complexes.
+            that connects residents to staff through a streamlined portal. 
+            Residents may easily submit and track requests, that will autonomously executes actions with explainability and observability for managers.
           </p>
 
           <div className="flex flex-wrap gap-4 text-sm text-slate-100/90">
