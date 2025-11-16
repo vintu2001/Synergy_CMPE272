@@ -10,6 +10,7 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime, timezone
 import boto3
 from botocore.exceptions import ClientError
+from app.services.database import get_resident_complaints_last_month
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +123,7 @@ class LLMClient:
             }
         
         try:
+            '''
             # Use simplified prompt to avoid safety blocks
             prompt = self._build_simple_prompt(
                 message_text, category, urgency, risk_score, rag_context
@@ -131,9 +133,29 @@ class LLMClient:
                 prompt,
                 generation_config=genai.GenerationConfig(
                     temperature=0.6,
-                    max_output_tokens=4096  # Optimized for faster responses
+                    max_output_tokens=4096 
                 )
             )
+'''
+            complaints = get_resident_complaints_last_month(resident_id)
+            logger.info(f"Retrieved {len(complaints)} complaints for resident {resident_id} from last 30 days")
+            
+            # Build the agentic prompt with all context
+            # Pass complaints as resident_history
+            prompt = self._build_agentic_prompt(
+                message_text, category, urgency, risk_score, resident_id, 
+                complaints, tools_data, rag_context
+            )
+
+                        
+            response = self.model.generate_content(
+                prompt,
+                generation_config=genai.GenerationConfig(
+                    temperature=0,
+                    max_output_tokens=4096 
+                )
+            )
+            
             
             # Check finish reason
             if response.candidates:
@@ -330,16 +352,14 @@ RETURN ONLY THIS JSON (no markdown, no ```):
     ) -> str:
         """Build comprehensive agentic prompt with all context."""
         
-        # Build history context
+        # Build history context from resident_history (which contains complaints from last month)
         history_context = ""
         if resident_history and len(resident_history) > 0:
-            recent_issues = []
-            for req in resident_history[-5:]:
-                recent_issues.append(
-                    f"  - {req.get('category', 'Unknown')}: \"{req.get('message_text', '')[:50]}...\" "
-                    f"(Status: {req.get('status', 'Unknown')})"
-                )
-            history_context = "\n".join(recent_issues)
+            history_context = f"This resident has submitted {len(resident_history)} request(s) in the past month:\n"
+            for i, req in enumerate(resident_history[-5:], 1):  # Show last 5
+                history_context += f"{i}. [{req.get('category', 'Unknown')}] \"{req.get('message_text', '')[:60]}...\" "
+                history_context += f"(Status: {req.get('status', 'Unknown')}, Created: {req.get('created_at', 'N/A')[:10]})\n"
+            history_context += "\nIMPORTANT: Consider if this is a recurring issue that needs a permanent solution."
         
         # Build tools context
         tools_context = ""

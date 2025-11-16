@@ -14,7 +14,6 @@ from app.agents.risk_prediction_agent import predict_risk
 from app.agents.simulation_agent import simulator
 from app.agents.decision_agent import make_decision
 from app.services.execution_layer import execute_decision
-from app.services.governance import log_decision
 from app.utils.helpers import generate_request_id
 from app.utils.cloudwatch_logger import (
     log_request_submission,
@@ -314,6 +313,7 @@ async def submit_request(request: MessageRequest):
             # Step 4: Get AI recommendation (but don't execute yet)
             recommended_option_id = None
             try:
+                logger.info(f"Calling decision agent with intent: {classification.intent}")
                 decision_request = DecisionRequest(
                     classification=classification,
                     simulation=simulation_result,
@@ -324,7 +324,10 @@ async def submit_request(request: MessageRequest):
                 recommended_option_id = decision_result.chosen_option_id
                 logger.info(f"AI recommended option: {recommended_option_id}")
             except Exception as decision_error:
-                logger.warning(f"Decision recommendation failed (non-critical): {decision_error}")
+                logger.error(f"Decision recommendation failed: {decision_error}", exc_info=True)
+                # Set a default recommendation if decision fails
+                recommended_option_id = "opt_2"  # Default to balanced option
+                logger.warning(f"Using default recommendation: {recommended_option_id}")
             
             response_data["simulation"] = {
                 "options_generated": len(simulation_result.options),

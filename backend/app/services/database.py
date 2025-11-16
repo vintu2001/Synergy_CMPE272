@@ -6,7 +6,7 @@ import boto3
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 from typing import Optional, List, Dict, Any
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from app.models.schemas import ResidentRequest, Status
 import os
@@ -123,3 +123,18 @@ async def update_request_status(request_id: str, status: Status) -> bool:
         logger.error(f"Error updating request: {e}")
         return False
 
+def get_resident_complaints_last_month(resident_id: str):
+    table = get_table()
+    one_month_ago = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+    now = datetime.now(timezone.utc).isoformat()
+    response = table.scan(
+        FilterExpression=(
+            "resident_id = :rid AND created_at BETWEEN :start AND :end"
+        ),
+        ExpressionAttributeValues={
+            ":rid": resident_id,
+            ":start": one_month_ago,
+            ":end": now,
+        }
+    )
+    return response.get("Items", [])
