@@ -130,8 +130,14 @@ class AgenticResolutionSimulator:
                         )
                         options.append(option)
                     
-                    logger.info(f"Generated {len(options)} phased options from multi-step reasoning")
-                    return options
+                    # Extract is_recurring from tools data for multi-step reasoning path
+                    is_recurring_from_tools = tools_data.get('recurring', {}).get('is_recurring', False)
+                    
+                    logger.info(f"Generated {len(options)} phased options from multi-step reasoning (is_recurring={is_recurring_from_tools})")
+                    return {
+                        'options': options,
+                        'is_recurring': is_recurring_from_tools
+                    }
             
             # Step 5: Retrieve relevant documents from knowledge base (RAG integration)
             rag_context = None
@@ -210,14 +216,25 @@ class AgenticResolutionSimulator:
                     }
                 )
             
-            # Step 7: Convert LLM response to SimulatedOption objects
+            # Step 7: Extract is_recurring from LLM response and tools data
+            # Priority: tools data > LLM response
+            is_recurring_from_tools = tools_data.get('recurring', {}).get('is_recurring', False)
+            is_recurring_from_llm = llm_response.get('is_recurring', False)
+            is_recurring = is_recurring_from_tools or is_recurring_from_llm
+            
+            if is_recurring_from_tools:
+                logger.info(f"Recurring issue detected by tools: {tools_data.get('recurring')}")
+            if is_recurring_from_llm:
+                logger.info(f"Recurring issue detected by LLM")
+            
+            # Step 8: Convert LLM response to SimulatedOption objects
             # Extract source document IDs from RAG context
             source_doc_ids = []
             if rag_context and rag_context.retrieved_docs:
                 # Collect all document IDs from retrieved context
                 source_doc_ids = [doc['doc_id'] for doc in rag_context.retrieved_docs if 'doc_id' in doc]
             
-            # Step 7.1: Check for RAG fallback - if RAG enabled but no documents retrieved
+            # Step 8.1: Check for RAG fallback - if RAG enabled but no documents retrieved
             # This indicates the system lacks knowledge base context for this request
             rag_fallback_needed = False
             if rag_enabled and (not rag_context or not rag_context.retrieved_docs or len(source_doc_ids) == 0):
@@ -275,8 +292,13 @@ class AgenticResolutionSimulator:
                 options.append(escalation_option)
                 logger.info(f"Added human escalation option due to missing RAG context (total options: {len(options)})")
             
-            logger.info(f"Successfully generated {len(options)} agentic options with {len(source_doc_ids)} RAG sources (rag_fallback={rag_fallback_needed})")
-            return options
+            logger.info(f"Successfully generated {len(options)} agentic options with {len(source_doc_ids)} RAG sources (is_recurring={is_recurring}, rag_fallback={rag_fallback_needed})")
+            
+            # Return both options and is_recurring flag
+            return {
+                'options': options,
+                'is_recurring': is_recurring
+            }
         
         except HTTPException:
             # Re-raise HTTP exceptions (these are intended for the API)

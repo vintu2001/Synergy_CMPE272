@@ -160,6 +160,7 @@ async def submit_request(request: MessageRequest):
         simulated_options = None
         llm_generation_failed = False
         llm_error_message = None
+        is_recurring = False  # Default to False
         
         try:
             # Get resident history for context
@@ -190,6 +191,9 @@ async def submit_request(request: MessageRequest):
                 )
                 simulate_response.raise_for_status()
                 simulation_data = simulate_response.json()
+                
+                # Extract is_recurring flag from simulation response
+                is_recurring = simulation_data.get("is_recurring", False)
                 
                 simulated_options = [
                     {
@@ -316,6 +320,7 @@ async def submit_request(request: MessageRequest):
         
         # Step 4: Get AI recommendation (Decision & Simulation Service)
         recommended_option_id = None
+        decision_data = None
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 decision_response = await client.post(
@@ -359,7 +364,7 @@ async def submit_request(request: MessageRequest):
         processing_time = (time.time() - start_time) * 1000
         logger.info(f"Request {request_id} processed in {processing_time:.2f}ms")
         
-        return {
+        response = {
             "status": "submitted",
             "message": "Request submitted successfully!",
             "request_id": request_id,
@@ -376,9 +381,16 @@ async def submit_request(request: MessageRequest):
             "simulation": {
                 "options_generated": len(simulated_options),
                 "options": simulated_options,
-                "recommended_option_id": recommended_option_id
+                "recommended_option_id": recommended_option_id,
+                "is_recurring": is_recurring
             }
         }
+        
+        # Add decision data if available
+        if decision_data:
+            response["decision"] = decision_data
+        
+        return response
     except HTTPException:
         raise
     except Exception as e:

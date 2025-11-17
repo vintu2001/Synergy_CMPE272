@@ -393,24 +393,48 @@ class AgentTools:
                         except (ValueError, TypeError):
                             continue
             
-            # Simple keyword matching for similar issues
+            # Improved keyword matching for similar issues
             message_lower = message_text.lower()
-            keywords = [word for word in message_lower.split() if len(word) > 4]
+            
+            # Extract keywords - include important short words like "ac", "hvac", "heat", "cold", "leak", etc.
+            important_short_words = {'ac', 'hvac', 'heat', 'cold', 'leak', 'hot', 'door', 'lock', 'key', 'wifi', 'gas', 'pipe'}
+            words = message_lower.split()
+            keywords = [
+                word for word in words 
+                if len(word) > 4 or word in important_short_words
+            ]
+            
+            # Also check for recurring keywords in the message itself ("again", "still", "keep")
+            recurring_keywords = {'again', 'still', 'keep', 'keeps', 'repeatedly', 'continue', 'continues', 'ongoing'}
+            message_indicates_recurring = any(kw in message_lower for kw in recurring_keywords)
             
             similar_count = 0
             for req in recent_same_category:
                 req_text = req.get('message_text', '').lower()
                 matches = sum(1 for kw in keywords if kw in req_text)
-                if matches >= 2:
+                # If we have at least 2 matching keywords OR the messages are very similar, count it
+                if matches >= 2 or (matches >= 1 and len(keywords) <= 3):
                     similar_count += 1
             
-            is_recurring = similar_count >= 2
+            # Mark as recurring if:
+            # 1. We found 2+ similar past requests in same category, OR
+            # 2. The message itself contains recurring keywords ("still", "again", etc.) AND there's at least 1 past request
+            is_recurring = similar_count >= 2 or (message_indicates_recurring and similar_count >= 1)
+            
+            logger.info(
+                f"Recurring check for {resident_id}: "
+                f"keywords={keywords}, similar_count={similar_count}, "
+                f"message_indicates_recurring={message_indicates_recurring}, "
+                f"category_count={len(recent_same_category)}, is_recurring={is_recurring}"
+            )
             
             return {
                 'is_recurring': is_recurring,
                 'occurrence_count': similar_count + 1,
                 'category_count': len(recent_same_category),
                 'time_window': '6 months',
+                'keywords_matched': keywords,
+                'message_has_recurring_keywords': message_indicates_recurring,
                 'recommendation': 'Permanent solution needed' if is_recurring else 'Standard resolution'
             }
         

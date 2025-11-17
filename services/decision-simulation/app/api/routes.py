@@ -32,7 +32,7 @@ async def simulate_endpoint(request: SimulationRequest) -> SimulationResponse:
         category = IssueCategory(request.category)
         urgency = Urgency(request.urgency)
         
-        options = await simulator.generate_options(
+        result = await simulator.generate_options(
             category=category,
             urgency=urgency,
             message_text=request.message_text,
@@ -41,11 +41,24 @@ async def simulate_endpoint(request: SimulationRequest) -> SimulationResponse:
             resident_history=request.resident_history
         )
         
+        # Check for errors from LLM
+        if 'error' in result:
+            error_info = result['error']
+            raise HTTPException(
+                status_code=500,
+                detail=error_info.get('user_message', 'Failed to generate resolution options')
+            )
+        
+        # Extract options and is_recurring from result
+        options = result.get('options', [])
+        is_recurring = result.get('is_recurring', False)
+        
         issue_id = f"agentic_{category.value}_{urgency.value}_{request.resident_id}"
         
         return SimulationResponse(
             options=options,
-            issue_id=issue_id
+            issue_id=issue_id,
+            is_recurring=is_recurring
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Simulation failed: {str(e)}")

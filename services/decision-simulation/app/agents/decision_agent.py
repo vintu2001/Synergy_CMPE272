@@ -199,7 +199,8 @@ def generate_decision_reasoning(
     all_options: List[SimulatedOption],
     classification: ClassificationResponse,
     weights: PolicyWeights = DEFAULT_WEIGHTS,
-    config: PolicyConfiguration = DEFAULT_CONFIG
+    config: PolicyConfiguration = DEFAULT_CONFIG,
+    is_recurring: bool = False
 ) -> DecisionReasoning:
     """Generate comprehensive decision reasoning with detailed analysis."""
     option, score = chosen_option
@@ -229,6 +230,17 @@ def generate_decision_reasoning(
     considerations.append(f"Decision Factor Analysis for {option.action}:")
     for factor, contribution in factor_breakdown.items():
         considerations.append(f"- {factor.replace('_', ' ').title()}: {contribution:.2f}")
+    
+    # Add recurring issue information if applicable
+    if is_recurring:
+        is_permanent = getattr(option, 'is_permanent_solution', False)
+        if is_permanent:
+            considerations.append("\nRecurring Issue Handling:")
+            considerations.append("- This is a recurring issue; permanent solution selected")
+            considerations.append("- Permanent solutions receive priority for recurring problems")
+        else:
+            considerations.append("\nRecurring Issue Handling:")
+            considerations.append("- This is a recurring issue; temporary solution selected as best balance")
     
     # Add comparative insights
     considerations.extend([f"Comparative Analysis:", *[f"- {insight}" for insight in comparative_insights]])
@@ -430,6 +442,27 @@ async def make_decision(
             for opt in request.simulation.options
         ]
         
+        # RECURRING ISSUE HANDLING: If this is a recurring issue, boost permanent solutions
+        if request.simulation.is_recurring:
+            logger.info(f"Recurring issue detected. Boosting permanent solution options.")
+            adjusted_scored_options = []
+            for opt, score in scored_options:
+                # Check if this option is marked as permanent solution
+                is_permanent = getattr(opt, 'is_permanent_solution', False)
+                
+                if is_permanent:
+                    # Boost permanent solutions by 15% for recurring issues
+                    boosted_score = min(score * 1.15, 1.0)
+                    logger.info(f"Option {opt.option_id} ({opt.action}): permanent solution, boosting score from {score:.3f} to {boosted_score:.3f}")
+                    adjusted_scored_options.append((opt, boosted_score))
+                else:
+                    # Slightly penalize temporary solutions (-5%) for recurring issues
+                    adjusted_score = max(score * 0.95, 0.0)
+                    logger.info(f"Option {opt.option_id} ({opt.action}): temporary solution, adjusted score from {score:.3f} to {adjusted_score:.3f}")
+                    adjusted_scored_options.append((opt, adjusted_score))
+            
+            scored_options = adjusted_scored_options
+        
         # Select best option
         best_option = max(scored_options, key=lambda x: x[1])
         option, score = best_option
@@ -441,7 +474,8 @@ async def make_decision(
             request.simulation.options,
             request.classification,
             request.weights,
-            request.config
+            request.config,
+            is_recurring=request.simulation.is_recurring
         )
         
         # Create a comprehensive response reasoning
