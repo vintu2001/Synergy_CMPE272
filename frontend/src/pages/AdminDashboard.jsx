@@ -48,7 +48,6 @@ export default function AdminDashboard() {
     notes: "",
   });
 
-  // NEW: per-request status + comment edits
   const [statusEdits, setStatusEdits] = useState({}); // { [requestId]: { status, comment } }
 
   const load = async () => {

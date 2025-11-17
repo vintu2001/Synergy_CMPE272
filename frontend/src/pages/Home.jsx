@@ -1,7 +1,31 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, Shield, User, Building2, KeyRound } from "lucide-react";
 import { useUser } from "../context/UserContext";
+
+// Hook to detect whether the app is in dark mode
+function useIsDarkMode() {
+  const [isDark, setIsDark] = useState(() => {
+    if (typeof document === "undefined") return false;
+    return document.documentElement.classList.contains("dark");
+  });
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+
+    const root = document.documentElement;
+
+    const observer = new MutationObserver(() => {
+      setIsDark(root.classList.contains("dark"));
+    });
+
+    observer.observe(root, { attributes: true, attributeFilter: ["class"] });
+
+    return () => observer.disconnect();
+  }, []);
+
+  return isDark;
+}
 
 export default function Home() {
   const navigate = useNavigate();
@@ -15,6 +39,8 @@ export default function Home() {
 
   const [adminKey, setAdminKey] = useState("");
   const [adminError, setAdminError] = useState("");
+
+  const isDark = useIsDarkMode();
 
   const handleResidentSubmit = (e) => {
     e.preventDefault();
@@ -41,20 +67,35 @@ export default function Home() {
     navigate("/admin");
   };
 
+  const backgroundUrl = isDark
+    ? "url('/apartment-bg.webp')" // dark mode background
+    : "url('/lewisRender2.jpg')"; // light mode background
+
   return (
     <div className="relative w-full min-h-screen flex items-center justify-center py-12 px-4">
       {/* Background image */}
       <div
-        className="absolute inset-0 bg-cover bg-center"
-        style={{ backgroundImage: "url('/apartment-bg.webp')" }}
+        className="absolute inset-0 bg-cover bg-center transition-[background-image] duration-500"
+        style={{ backgroundImage: backgroundUrl }}
       />
-      {/* Dark overlay + slight blur for readability */}
-      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-[2px]" />
+
+      {/* Overlay (darker in dark mode, lighter in light mode) */}
+      <div
+        className={`absolute inset-0 backdrop-blur-[2px] ${
+          isDark ? "bg-slate-900/60" : "bg-black/20"
+        }`}
+      />
 
       <div className="relative z-10 w-full max-w-6xl grid gap-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] items-center">
-        {/* Left hero section (only on lg+) */}
+        {/* Left hero section */}
         <div className="hidden lg:flex flex-col gap-6 text-slate-50">
-          <p className="inline-flex items-center gap-2 rounded-full bg-slate-900/70 px-4 py-2 text-xs font-semibold shadow-lg">
+          <p
+            className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold shadow-lg ${
+              isDark
+                ? "bg-slate-900/70 text-slate-50"
+                : "bg-white/90 text-slate-900"
+            }`}
+          >
             <Building2 className="h-4 w-4" />
             Synergy Apartment Management
           </p>
@@ -63,18 +104,38 @@ export default function Home() {
             Synergy Agentic Apartment Manager
           </h1>
 
-          <p className="inline-block text-lg md:text-xl text-slate-100/90 max-w-xl bg-slate-900/75 px-4 py-3 rounded-xl shadow-lg backdrop-blur-sm">
-            Synergy is is an autonomous, AI-driven system that functions as a proactive digital property manager for apartment complexes.
-            that connects residents to staff through a streamlined portal. 
-            Residents may easily submit and track requests, that will autonomously executes actions with explainability and observability for managers.
+          <p
+            className={`inline-block text-lg md:text-xl max-w-xl px-4 py-3 rounded-xl shadow-lg backdrop-blur-sm ${
+              isDark
+                ? "bg-slate-900/75 text-slate-100/90"
+                : "bg-white/95 text-slate-900"
+            }`}
+          >
+            Synergy is an autonomous, AI-driven system that functions as a
+            proactive digital property manager for apartment complexes that
+            connects residents to staff through a streamlined portal. Residents
+            may easily submit and track requests that will autonomously execute
+            actions with explainability and observability for managers.
           </p>
 
-          <div className="flex flex-wrap gap-4 text-sm text-slate-100/90">
-            <div className="inline-flex items-center gap-2 rounded-xl bg-slate-900/70 px-3 py-2">
+          <div className="flex flex-wrap gap-4 text-sm">
+            <div
+              className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 ${
+                isDark
+                  ? "bg-slate-900/70 text-slate-100/90"
+                  : "bg-white/90 text-slate-900"
+              }`}
+            >
               <User className="h-4 w-4" />
               <span>Resident-first service requests</span>
             </div>
-            <div className="inline-flex items-center gap-2 rounded-xl bg-slate-900/70 px-3 py-2">
+            <div
+              className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 ${
+                isDark
+                  ? "bg-slate-900/70 text-slate-100/90"
+                  : "bg-white/90 text-slate-900"
+              }`}
+            >
               <Shield className="h-4 w-4" />
               <span>Secure admin controls</span>
             </div>

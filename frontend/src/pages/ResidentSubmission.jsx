@@ -43,12 +43,10 @@ export default function ResidentSubmission() {
   const debounceRef = useRef(null);
   const abortControllerRef = useRef(null);
   
-  // NEW: State for option selection flow - allow multiple options to be expanded
-  const [expandedOptions, setExpandedOptions] = useState(new Set()); // Track which options' details are expanded
+  const [expandedOptions, setExpandedOptions] = useState(new Set());
 
   const charCount = useMemo(() => messageText.length || 0, [messageText]);
   
-  // Toggle function for expanding/collapsing option details
   const toggleOptionDetails = (optionId) => {
     setExpandedOptions(prev => {
       const newSet = new Set(prev);
@@ -61,20 +59,19 @@ export default function ResidentSubmission() {
     });
   };
   
-  // Parse action text into steps for display
   const parseActionSteps = (action, reasoning) => {
     const steps = [];
     
-    // Try to extract steps from action text
+
     const text = action + ' ' + reasoning;
     
-    // Look for numbered steps or sequential actions
+
     const numberedSteps = text.match(/\d+[.)]\s*[^.]+\./g);
     if (numberedSteps && numberedSteps.length > 0) {
       return numberedSteps.map(s => s.replace(/^\d+[.)]\s*/, '').trim());
     }
     
-    // Look for "first", "then", "finally" patterns
+
     const sequentialPattern = /(first|then|next|after|finally)[,:]?\s*([^.]+)/gi;
     let match;
     while ((match = sequentialPattern.exec(text)) !== null) {
@@ -82,7 +79,7 @@ export default function ResidentSubmission() {
     }
     if (steps.length > 0) return steps;
     
-    // Look for action keywords
+
     const actionKeywords = ['contact', 'dispatch', 'schedule', 'send', 'perform', 'check', 'repair', 'replace', 'inspect'];
     const sentences = text.split(/[.;]/).filter(s => s.trim());
     
@@ -96,7 +93,7 @@ export default function ResidentSubmission() {
       }
     }
     
-    // If we still have no steps, create basic steps from the action
+
     if (steps.length === 0) {
       if (action.toLowerCase().includes('emergency') || action.toLowerCase().includes('immediate')) {
         steps.push('Emergency service dispatch initiated');
@@ -113,7 +110,7 @@ export default function ResidentSubmission() {
       }
     }
     
-    return steps.slice(0, 5); // Limit to 5 steps max
+    return steps.slice(0, 5); 
   };
 
   useEffect(() => {
@@ -123,35 +120,35 @@ export default function ResidentSubmission() {
   }, [residentId, setValue]);
 
   useEffect(() => {
-    // Don't classify if message is too short or resident not set
+
     if (!messageText || messageText.trim().length < 15 || !residentId) {
       setAnalysis(null);
       setError("");
       return;
     }
 
-    // Cancel any in-flight request
+
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
 
-    // Clear any existing timeout
+
     if (debounceRef.current) clearTimeout(debounceRef.current);
     
-    // Create new abort controller for this request
+
     abortControllerRef.current = new AbortController();
     const signal = abortControllerRef.current.signal;
     
-    // Set a longer debounce (2 seconds) - only classify when user stops typing
+
     debounceRef.current = setTimeout(async () => {
-      // Double-check message hasn't changed (user might have typed more)
+
       const currentMessage = messageText.trim();
       if (currentMessage.length < 15) {
         setAnalyzing(false);
         return;
       }
 
-      // Check if request was cancelled
+
       if (signal.aborted) {
         return;
       }
@@ -161,12 +158,12 @@ export default function ResidentSubmission() {
         setError("");
         const res = await classifyMessage(residentId, currentMessage, { signal });
         
-        // Check again if request was cancelled during API call
+
         if (signal.aborted) {
           return;
         }
         
-        // Only update if message hasn't changed during the API call
+
         if (messageText.trim() === currentMessage) {
           setAnalysis(res);
           setValue("category", res.category);
@@ -174,12 +171,12 @@ export default function ResidentSubmission() {
           setValue("intent", res.intent);
         }
       } catch (e) {
-        // Ignore abort errors
+
         if (e.name === 'AbortError' || e.name === 'CanceledError' || signal.aborted) {
           return;
         }
         
-        // Only show error if message hasn't changed and not aborted
+
         if (messageText.trim() === currentMessage && !signal.aborted) {
           setError("We couldn't analyze the message. Check your connection and try again.");
         }
@@ -188,10 +185,10 @@ export default function ResidentSubmission() {
           setAnalyzing(false);
         }
       }
-    }, 2000); // 2 seconds - wait for user to stop typing
+    }, 2000); 
 
     return () => {
-      // Cancel request on cleanup
+
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
@@ -212,7 +209,7 @@ export default function ResidentSubmission() {
       return;
     }
 
-    // Prevent submission while classification is in progress
+
     if (analyzing) {
       setToast({ message: "Please wait for the issue classification to complete before submitting.", type: "error" });
       return;
@@ -225,24 +222,24 @@ export default function ResidentSubmission() {
       const urgency = watch("urgency") || analysis?.urgency;
       const result = await submitRequest(residentId, messageText, category, urgency);
       
-      // Check if this was a question that got answered
+
       if (result.status === "answered") {
         setToast({
           message: "Your question has been answered!",
           type: "success",
         });
         
-        // Show the answer in a nice format
+
         setSubmittedResult({
           ...result,
           isQuestion: true
         });
         
-        // Don't auto-reset - let user read and manually clear if they want
+
         return;
       }
       
-      // Check if LLM generation failed
+
       if (result.status === "error") {
         setError(result.message);
         setToast({
@@ -250,7 +247,7 @@ export default function ResidentSubmission() {
           type: "error"
         });
         
-        // Store error result with request_id so user can escalate
+
         setSubmittedResult({
           ...result,
           isError: true,
@@ -259,7 +256,7 @@ export default function ResidentSubmission() {
         return;
       }
       
-      // Store result and show option selection
+
       setSubmittedResult(result);
       setToast({
         message: `Request classified! Please select a resolution option.`,
@@ -273,7 +270,6 @@ export default function ResidentSubmission() {
     }
   };
   
-  // NEW: Handle option selection
   const handleSelectOption = async (optionId) => {
     if (!submittedResult || !submittedResult.request_id) {
       setToast({ 
@@ -293,7 +289,7 @@ export default function ResidentSubmission() {
         type: "success",
       });
       
-      // Reset form after option selection
+
       setTimeout(() => {
         reset();
         setAnalysis(null);
