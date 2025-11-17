@@ -1,0 +1,8 @@
+pytest
+pytest-asyncio
+pytest-mock
+pytest-cov
+fastapi
+pydantic
+boto3
+python-dotenv
