@@ -63,7 +63,7 @@ export default function Home() {
             Synergy Agentic Apartment Manager
           </h1>
 
-          <p className="text-base text-slate-100/90 max-w-xl">
+          <p className="inline-block text-lg md:text-xl text-slate-100/90 max-w-xl bg-slate-900/75 px-4 py-3 rounded-xl shadow-lg backdrop-blur-sm">
             Synergy is is an autonomous, AI-driven system that functions as a proactive digital property manager for apartment complexes.
             that connects residents to staff through a streamlined portal. 
             Residents may easily submit and track requests, that will autonomously executes actions with explainability and observability for managers.
