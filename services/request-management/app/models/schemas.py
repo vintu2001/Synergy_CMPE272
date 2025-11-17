@@ -74,8 +74,10 @@ class ResidentRequest(BaseModel):
     resolution_notes: Optional[str] = None
     resolved_by: Optional[str] = None
     resolved_at: Optional[datetime] = None
+    admin_comment: Optional[str] = None  # 👈 NEW
     created_at: datetime
     updated_at: datetime
+
 
 
 class AdminRequestResponse(BaseModel):
@@ -92,3 +94,17 @@ class ResolveRequestModel(BaseModel):
     request_id: str = Field(..., description="Request ID to resolve")
     resolution_notes: Optional[str] = Field(None, description="Optional notes about resolution")
     resolved_by: str = Field(..., description="Who resolved it: 'admin' or 'resident'")
+
+class ResolveRequestModel(BaseModel):
+    request_id: str = Field(..., description="Request ID to resolve")
+    resolution_notes: Optional[str] = Field(None, description="Optional notes about resolution")
+    resolved_by: str = Field(..., description="Who resolved it: 'admin' or 'resident'")
+
+
+class UpdateStatusModel(BaseModel):
+    request_id: str = Field(..., description="Request ID to update")
+    status: Status = Field(..., description="New status for the request")
+    admin_comment: Optional[str] = Field(
+        None,
+        description="Optional admin comment visible to the resident",
+    )

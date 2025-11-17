@@ -66,3 +66,16 @@ export async function resolveRequest(requestId, resolvedBy, resolutionNotes = nu
   return data;
 }
 
+export async function updateRequestStatus(requestId, status, adminComment = null) {
+  const payload = {
+    request_id: requestId,
+    status, // must match backend enum values: "Submitted", "Processing", "In Progress", "Resolved", "Escalated"
+  };
+
+  if (adminComment && adminComment.trim() !== "") {
+    payload.admin_comment = adminComment.trim();
+  }
+
+  const { data } = await apiClient.post("/api/v1/update-status", payload);
+  return data;
+}

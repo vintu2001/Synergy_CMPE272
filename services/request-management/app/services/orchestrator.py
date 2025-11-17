@@ -2,10 +2,15 @@
 Request Orchestrator
 Coordinates request submission flow across microservices using HTTP calls.
 """
-from fastapi import APIRouter, HTTPException
 from app.models.schemas import (
-    MessageRequest, Status, ResidentRequest, SelectOptionRequest, ResolveRequestModel
+    MessageRequest,
+    Status,
+    ResidentRequest,
+    SelectOptionRequest,
+    ResolveRequestModel,
+    UpdateStatusModel,  
 )
+
 from app.services.database import create_request, get_request_by_id, get_table
 from app.utils.helpers import generate_request_id
 from datetime import datetime, timezone
@@ -386,110 +391,59 @@ async def submit_request(request: MessageRequest):
         raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
 
 
-@router.post("/select-option")
-async def select_option(selection: SelectOptionRequest):
+@router.post("/update-status")
+async def update_status(update_data: UpdateStatusModel):
     """
-    Resident selects an option from the simulated options, or escalates to human.
-    This triggers execution.
+    Admin: update the status of a request and optionally attach a comment.
+    The comment will be stored on the request and visible to the resident.
     """
     try:
-        # Get the request
-        request = get_request_by_id(selection.request_id)
+        # Make sure the request exists
+        request = get_request_by_id(update_data.request_id)
         if not request:
             raise HTTPException(status_code=404, detail="Request not found")
-        
-        # Special handling for human escalation
-        if selection.selected_option_id == "escalate_to_human":
-            table = get_table()
-            table.update_item(
-                Key={'request_id': selection.request_id},
-                UpdateExpression='SET user_selected_option_id = :sel_opt, #status = :status, updated_at = :updated',
-                ExpressionAttributeNames={'#status': 'status'},
-                ExpressionAttributeValues={
-                    ':sel_opt': "escalate_to_human",
-                    ':status': Status.ESCALATED.value,
-                    ':updated': datetime.now(timezone.utc).isoformat()
-                }
-            )
-            
-            return {
-                "status": "escalated",
-                "message": "Your request has been escalated to a human staff member. You'll receive a response within 24 hours.",
-                "request_id": selection.request_id,
-                "selected_option": {
-                    "option_id": "escalate_to_human",
-                    "action": "Escalate to Human Support",
-                    "estimated_cost": 0,
-                    "estimated_time": 24.0,
-                    "reasoning": "Manual escalation requested by resident"
-                }
-            }
-        
-        # Normal option selection flow
-        simulated_options = request.get('simulated_options', [])
-        if not simulated_options:
-            raise HTTPException(status_code=400, detail="No options available for this request")
-        
-        selected_option = next(
-            (opt for opt in simulated_options if opt['option_id'] == selection.selected_option_id),
-            None
-        )
-        
-        if not selected_option:
-            raise HTTPException(status_code=400, detail="Invalid option ID")
-        
-        # Update request with user's selection
+
         table = get_table()
+        now = datetime.now(timezone.utc).isoformat()
+
+        update_expressions = ["#status = :status", "updated_at = :updated_at"]
+        expr_names = {"#status": "status"}
+        expr_values = {
+            ":status": update_data.status.value,
+            ":updated_at": now,
+        }
+
+        # Only update admin_comment when one is provided
+        if update_data.admin_comment is not None and update_data.admin_comment.strip() != "":
+            update_expressions.append("admin_comment = :comment")
+            expr_values[":comment"] = update_data.admin_comment.strip()
+
         table.update_item(
-            Key={'request_id': selection.request_id},
-            UpdateExpression='SET user_selected_option_id = :sel_opt, #status = :status, updated_at = :updated',
-            ExpressionAttributeNames={'#status': 'status'},
-            ExpressionAttributeValues={
-                ':sel_opt': selection.selected_option_id,
-                ':status': Status.IN_PROGRESS.value,
-                ':updated': datetime.now(timezone.utc).isoformat()
-            }
+            Key={"request_id": update_data.request_id},
+            UpdateExpression="SET " + ", ".join(update_expressions),
+            ExpressionAttributeNames=expr_names,
+            ExpressionAttributeValues=expr_values,
         )
-        
-        # Execute the selected option (Execution Service)
-        try:
-            from app.models.schemas import IssueCategory
-            category = IssueCategory(request.get('category', 'Maintenance'))
-            
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                execution_response = await client.post(
-                    f"{EXECUTION_URL}/api/v1/execute",
-                    json={
-                        "chosen_action": selected_option['action'],
-                        "chosen_option_id": selection.selected_option_id,
-                        "reasoning": selected_option.get('reasoning', ''),
-                        "alternatives_considered": [],
-                        "category": category.value
-                    }
-                )
-                execution_response.raise_for_status()
-                execution_result = execution_response.json()
-        except Exception as exec_error:
-            logger.warning(f"Execution service failed (non-critical): {exec_error}")
-            execution_result = {
-                "status": "executed",
-                "action_taken": selected_option['action'],
-                "message": f"Executing: {selected_option['action']}"
-            }
-        
+
+        logger.info(
+            f"Request {update_data.request_id} status updated to {update_data.status.value}"
+        )
+
         return {
             "status": "success",
-            "message": "Option selected and execution initiated",
-            "request_id": selection.request_id,
-            "selected_option": selected_option,
-            "execution": execution_result
+            "message": "Request status updated",
+            "request_id": update_data.request_id,
+            "new_status": update_data.status.value,
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error selecting option: {e}")
-        raise HTTPException(status_code=500, detail=f"Error selecting option: {str(e)}")
+        logger.error(f"Error updating request status: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error updating request status: {str(e)}",
+        )
 
 
 @router.post("/resolve-request")
