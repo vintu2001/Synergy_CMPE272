@@ -12,6 +12,7 @@ from app.models.schemas import (
 from app.agents.simulation_agent import simulator
 from app.agents.decision_agent import make_decision
 from app.rag.retriever import answer_question
+from app.utils.cloudwatch_logger import log_to_cloudwatch
 
 router = APIRouter()
 
@@ -43,11 +44,26 @@ async def simulate_endpoint(request: SimulationRequest) -> SimulationResponse:
         
         issue_id = f"agentic_{category.value}_{urgency.value}_{request.resident_id}"
         
+        log_to_cloudwatch('simulation_completed', {
+            'resident_id': request.resident_id,
+            'category': category.value,
+            'urgency': urgency.value,
+            'risk_score': round(request.risk_score, 3) if request.risk_score else None,
+            'options_generated': len(options),
+            'option_actions': [opt.action[:50] if hasattr(opt, 'action') else str(opt)[:50] for opt in options[:3]],
+            'issue_id': issue_id
+        })
+        
         return SimulationResponse(
             options=options,
             issue_id=issue_id
         )
     except Exception as e:
+        log_to_cloudwatch('simulation_error', {
+            'resident_id': request.resident_id,
+            'category': request.category,
+            'error': str(e)
+        })
         raise HTTPException(status_code=500, detail=f"Simulation failed: {str(e)}")
 
 
@@ -58,9 +74,21 @@ async def decide_endpoint(request: DecisionRequest) -> DecisionResponse:
     """
     try:
         result = await make_decision(request=request)
-        # Extract the decision from DecisionResponseWithStatus
+        
+        log_to_cloudwatch('decision_made', {
+            'chosen_option_id': result.decision.chosen_option_id,
+            'chosen_action': result.decision.chosen_action[:100],
+            'estimated_cost': result.decision.estimated_cost,
+            'estimated_time': result.decision.estimated_time,
+            'alternatives_considered': len(result.decision.alternatives_considered) if result.decision.alternatives_considered else 0,
+            'reasoning_preview': result.decision.reasoning[:150] if result.decision.reasoning else None
+        })
+        
         return result.decision
     except Exception as e:
+        log_to_cloudwatch('decision_error', {
+            'error': str(e)
+        })
         raise HTTPException(status_code=500, detail=f"Decision failed: {str(e)}")
 
 
@@ -77,6 +105,20 @@ async def answer_question_endpoint(request: AnswerQuestionRequest) -> Dict[str, 
             category=request.category,
             top_k=5
         )
+        
+        log_to_cloudwatch('question_answered', {
+            'resident_id': request.resident_id,
+            'question_preview': request.question[:100],
+            'category': request.category,
+            'sources_count': len(result.get('sources', [])),
+            'answer_length': len(result.get('answer', ''))
+        })
+        
         return result
     except Exception as e:
+        log_to_cloudwatch('question_answer_error', {
+            'resident_id': request.resident_id,
+            'question_preview': request.question[:100],
+            'error': str(e)
+        })
         raise HTTPException(status_code=500, detail=f"Failed to answer question: {str(e)}")
