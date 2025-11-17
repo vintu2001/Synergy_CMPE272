@@ -398,7 +398,7 @@ async def submit_request(request: MessageRequest):
             'status': 'success'
         })
         
-        return {
+        response = {
             "status": "submitted",
             "message": "Request submitted successfully!",
             "request_id": request_id,
@@ -419,6 +419,12 @@ async def submit_request(request: MessageRequest):
                 "is_recurring": is_recurring
             }
         }
+        
+        # Add decision data if available
+        if decision_data:
+            response["decision"] = decision_data
+        
+        return response
     except HTTPException:
         raise
     except Exception as e:

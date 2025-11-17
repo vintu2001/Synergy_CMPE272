@@ -2,6 +2,7 @@
 Decision & Simulation API routes
 Handles resolution option simulation, decision making, and question answering.
 """
+import logging
 from fastapi import APIRouter, HTTPException, Body
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
@@ -15,6 +16,7 @@ from app.rag.retriever import answer_question
 from app.utils.cloudwatch_logger import log_to_cloudwatch
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class AnswerQuestionRequest(BaseModel):
@@ -79,21 +81,29 @@ async def decide_endpoint(request: DecisionRequest) -> DecisionResponse:
     """
     try:
         result = await make_decision(request=request)
+        logger.info(f"✓ Decision result received: {result.decision.chosen_option_id if result and result.decision else 'None'}")
         
-        log_to_cloudwatch('decision_made', {
-            'chosen_option_id': result.decision.chosen_option_id,
-            'chosen_action': result.decision.chosen_action[:100],
-            'estimated_cost': result.decision.estimated_cost,
-            'estimated_time': result.decision.estimated_time,
-            'alternatives_considered': len(result.decision.alternatives_considered) if result.decision.alternatives_considered else 0,
-            'reasoning_preview': result.decision.reasoning[:150] if result.decision.reasoning else None
-        })
+        try:
+            log_to_cloudwatch('decision_made', {
+                'chosen_option_id': result.decision.chosen_option_id,
+                'chosen_action': result.decision.chosen_action[:100],
+                'estimated_cost': result.decision.estimated_cost,
+                'estimated_time': result.decision.estimated_time,
+                'alternatives_considered': len(result.decision.alternatives_considered) if result.decision.alternatives_considered else 0,
+                'reasoning_preview': result.decision.reasoning[:150] if result.decision.reasoning else None
+            })
+        except Exception as cw_error:
+            logger.warning(f"CloudWatch logging failed (non-critical): {cw_error}")
         
         return result.decision
     except Exception as e:
-        log_to_cloudwatch('decision_error', {
-            'error': str(e)
-        })
+        logger.error(f"❌ Decision endpoint failed: {str(e)}", exc_info=True)
+        try:
+            log_to_cloudwatch('decision_error', {
+                'error': str(e)
+            })
+        except:
+            pass
         raise HTTPException(status_code=500, detail=f"Decision failed: {str(e)}")
 
 

@@ -305,7 +305,7 @@ class RAGRetriever:
         
         # Use decision-specific defaults
         k = top_k if top_k is not None else 3  # Fewer docs for decision agent
-        threshold = similarity_threshold if similarity_threshold is not None else 0.75  # Higher precision
+        threshold = similarity_threshold if similarity_threshold is not None else self.similarity_threshold  # Use configured threshold
         
         # Enhance query with context
         enhanced_query = query
