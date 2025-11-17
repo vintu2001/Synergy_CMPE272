@@ -50,44 +50,23 @@ The Agentic Apartment Manager is built as a distributed, event-driven system on 
 
 ```
 Synergy_CMPE272/
-├── services/                 # Microservices (NEW)
-│   ├── request-management/  # Request Management Service (Railway)
-│   │   ├── app/
-│   │   ├── Dockerfile
-│   │   ├── requirements.txt
-│   │   └── railway.json
-│   ├── ai-processing/       # AI Processing Service (Railway)
-│   │   ├── app/
-│   │   ├── Dockerfile
-│   │   ├── requirements.txt
-│   │   └── railway.json
-│   ├── decision-simulation/ # Decision & Simulation Service (EC2)
+├── services/                 # Microservices
+│   ├── request-management/  # Request Management Service
 │   │   ├── app/
 │   │   ├── Dockerfile
 │   │   └── requirements.txt
-│   └── execution/           # Execution Service (Railway)
+│   ├── ai-processing/       # AI Processing Service
+│   │   ├── app/
+│   │   ├── Dockerfile
+│   │   └── requirements.txt
+│   ├── decision-simulation/ # Decision & Simulation Service
+│   │   ├── app/
+│   │   ├── Dockerfile
+│   │   └── requirements.txt
+│   └── execution/           # Execution Service
 │       ├── app/
 │       ├── Dockerfile
-│       ├── requirements.txt
-│       └── railway.json
-│
-├── backend/                 # Monolith (legacy - for reference)
-│   ├── app/                 # Application code
-│   │   ├── agents/          # Agent implementations
-│   │   ├── rag/             # RAG module
-│   │   ├── services/        # Service layer
-│   │   ├── models/          # Data models and schemas
-│   │   └── utils/           # Utility functions
-│   ├── kb/                  # Knowledge Base (35+ documents)
-│   │   ├── policies/        # Building policies
-│   │   ├── sops/            # Standard Operating Procedures
-│   │   ├── catalogs/        # Vendor/contact catalogs
-│   │   └── slas/            # Service Level Agreements
-│   ├── vector_stores/       # Vector database storage
-│   │   └── chroma_db/       # ChromaDB persistent storage
-│   ├── tests/               # Test suite
-│   ├── requirements.txt     # Python dependencies
-│   └── Dockerfile           # Docker configuration
+│       └── requirements.txt
 │
 ├── frontend/                # Frontend application
 │   ├── src/
@@ -100,10 +79,8 @@ Synergy_CMPE272/
 │   └── models/              # Trained models
 │
 └── infrastructure/          # Infrastructure as code
-    ├── aws/                 # AWS resources
-    ├── docker/              # Docker compose
-    └── ec2/                 # EC2 deployment configs
-        └── docker-compose.yml
+    ├── docker/              # Docker compose for local testing
+    │   └── docker-compose.microservices.yml
 ```
 
 ---
@@ -111,225 +88,10 @@ Synergy_CMPE272/
 ## Getting Started
 
 ### Prerequisites
-- Python 3.11+
-- Node.js (for frontend)
-- AWS Account with appropriate permissions
-- Docker (for containerized development)
-- Railway.app account (free - https://railway.app)
-- GitHub account (for deployment)
-
----
-
-## 🚀 Quick Start: Deploy Microservices
-
-The system is now deployed as **4 microservices** using a **Hybrid Railway + EC2** strategy:
-
-- **Railway.app** (3 services): Request Management, AI Processing, Execution
-- **AWS EC2** (1 service): Decision & Simulation (with RAG/ChromaDB)
-
-### Step 1: Deploy Services on Railway
-
-1. **Sign up for Railway:**
-   - Go to https://railway.app
-   - Sign up with GitHub (free - $5 credit/month)
-
-2. **Deploy Request Management Service:**
-   ```bash
-   # In Railway dashboard:
-   # 1. Click "New Project"
-   # 2. Select "Deploy from GitHub repo"
-   # 3. Choose your repository
-   # 4. Set root directory: services/request-management
-   # 5. Add environment variables (see DEPLOYMENT_GUIDE.md)
-   ```
-
-3. **Deploy AI Processing Service:**
-   ```bash
-   # Same process, set root directory: services/ai-processing
-   ```
-
-4. **Deploy Execution Service:**
-   ```bash
-   # Same process, set root directory: services/execution
-   ```
-
-### Step 2: Deploy Decision & Simulation Service on EC2
-
-1. **Launch EC2 Instance:**
-   - Go to AWS Console → EC2
-   - Launch Ubuntu 22.04 LTS (t2.micro - free tier)
-   - Configure security group (open port 8003)
-
-2. **SSH into EC2:**
-   ```bash
-   ssh -i your-key.pem ubuntu@<ec2-ip>
-   ```
-
-3. **Install Docker:**
-   ```bash
-   sudo apt update
-   sudo apt install -y docker.io docker-compose
-   sudo usermod -aG docker ubuntu
-   newgrp docker
-   ```
-
-4. **Deploy Service:**
-   ```bash
-   git clone <your-repo>
-   cd Synergy_CMPE272/infrastructure/ec2
-   
-   # Create .env file with GEMINI_API_KEY, AWS credentials
-   nano .env
-   
-   # Deploy
-   docker-compose up -d
-   
-   # Check status
-   curl http://localhost:8003/health
-   ```
-
-### Step 3: Configure Service URLs
-
-Update environment variables in Railway services:
-- `AI_PROCESSING_SERVICE_URL` → Railway URL
-- `DECISION_SIMULATION_SERVICE_URL` → `http://<ec2-ip>:8003`
-- `EXECUTION_SERVICE_URL` → Railway URL
-
-### Step 4: Test Deployment
-
-```bash
-# Test each service
-curl https://request-management-service.up.railway.app/health
-curl https://ai-processing-service.up.railway.app/health
-curl http://<ec2-ip>:8003/health
-curl https://execution-service.up.railway.app/health
-
-# Test end-to-end
-curl -X POST https://request-management-service.up.railway.app/api/v1/submit-request \
-  -H "Content-Type: application/json" \
-  -d '{"resident_id": "RES_1001", "message_text": "AC is broken"}'
-```
-
-**📖 For detailed deployment instructions, see [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)**
-
----
-
-## 🧪 Local Testing (End-to-End from UI)
-
-To test all microservices locally with the frontend:
-
-### Quick Start
-
-```bash
-# Run setup script (initializes ChromaDB, creates config files)
-./scripts/setup_local_testing.sh
-
-# Edit environment variables
-nano infrastructure/docker/.env
-
-# Start all services
-cd infrastructure/docker
-docker-compose -f docker-compose.microservices.yml up -d
-
-# Start frontend (in another terminal)
-cd frontend
-npm run dev
-```
-
-**Open:** `http://localhost:5173` in your browser
-
-**📖 For detailed local testing instructions, see [LOCAL_TESTING_GUIDE.md](LOCAL_TESTING_GUIDE.md)**
-
----
-
-## Local Development Setup
-
-### Prerequisites
-- Python 3.11+
-- Node.js (for frontend)
-- AWS Account with appropriate permissions
-- Docker (for containerized development)
-
-### Backend Setup
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/vintu2001/Synergy_CMPE272.git
-   cd Synergy_CMPE272
-   ```
-
-2. **Set up Python virtual environment**
-   ```bash
-   cd backend
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   pip install -r requirements.txt
-   ```
-
-3. **Configure environment variables**
-   ```bash
-   cp .env.example .env
-   # Edit .env with your AWS credentials and RAG configuration
-   ```
-   
-   **Key RAG Environment Variables:**
-   ```bash
-   RAG_ENABLED=true
-   RAG_TOP_K=5
-   RAG_SIMILARITY_THRESHOLD=0.7
-   EMBEDDING_MODEL=all-MiniLM-L6-v2
-   EMBEDDING_CACHE_ENABLED=true
-   VECTOR_STORE_TYPE=chromadb
-   VECTOR_STORE_PATH=./vector_stores/chroma_db
-   VECTOR_STORE_COLLECTION=apartment_kb
-   ```
-
-4. **Download embedding model** (automatic on first run)
-   ```bash
-   python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
-   ```
-
-5. **Initialize vector store**
-   ```bash
-   python kb/ingest_documents.py
-   ```
-
-6. **Validate setup**
-   ```bash
-   python app/utils/validate_env.py
-   ```
-
-7. **Run the backend server**
-   ```bash
-   uvicorn app.main:app --reload
-   ```
-   The API will be available at `http://localhost:8000`
-
-### ML Environment Setup
-
-1. **Set up ML environment**
-   ```bash
-   cd ml
-   python -m venv venv
-   source venv/bin/activate
-   pip install -r requirements.txt
-   ```
-
-2. **Generate synthetic data**
-   ```bash
-   python scripts/synthetic_message_generator.py
-   ```
-
-### Frontend Setup
-See `frontend/README.md` for details.
-
-### Docker Setup (Optional)
-
-1. **Run with Docker Compose (Monolith)**
-   ```bash
-   cd infrastructure/docker
-   docker-compose up
-   ```
+- Docker and Docker Compose installed
+- Node.js 18+ and npm 9+
+- Python 3.10+ (for local development, optional)
+- Google Gemini API key (for AI features)
 
 2. **Run Microservices Locally**
    ```bash
@@ -356,51 +118,191 @@ See `frontend/README.md` for details.
 
 ---
 
-## API Documentation
+## 🧪 Local Testing (End-to-End from UI)
 
-Once the backend is running, visit:
-- API Docs: `http://localhost:8000/docs` (Swagger UI)
-- Alternative Docs: `http://localhost:8000/redoc`
+Complete guide to test all microservices locally with the frontend.
 
----
+### Step 1: Clone and Navigate to Project
 
-## Quick Start: RAG Features
+```bash
+git clone https://github.com/vintu2001/Synergy_CMPE272.git
+cd Synergy_CMPE272
+```
 
-**To use RAG in your queries:**
+### Step 2: Create Environment File
 
-1. **Enable RAG** (in `.env`):
-   ```bash
-   RAG_ENABLED=true
-   ```
+```bash
+cd infrastructure/docker
+cp .env.example .env
+```
 
-2. **Submit a resident request**:
-   ```bash
-   curl -X POST http://localhost:8000/api/v1/submit-request \
-     -H "Content-Type: application/json" \
-     -d '{
-       "resident_id": "RES_Building123_1001",
-       "message_text": "AC is broken and it'\''s 95°F outside"
-     }'
-   ```
+Edit `.env` file with your configuration:
 
-3. **RAG automatically**:
-   - Extracts `building_id` from `resident_id`
-   - Retrieves relevant policies, SOPs, and vendor catalogs
-   - Injects context into LLM prompts
-   - Generates options with policy citations
-   - Makes decisions grounded in building rules
+```bash
+# Required
+GEMINI_API_KEY=your_gemini_api_key_here
 
-4. **View decisions with citations**:
-   - Check `source_doc_ids` in `SimulatedOption`
-   - Check `rule_sources` and `rule_object` in `DecisionResponse`
+# AWS (optional for local testing, required for production features)
+AWS_REGION=us-west-2
+AWS_ACCESS_KEY_ID=your_aws_access_key
+AWS_SECRET_ACCESS_KEY=your_aws_secret_key
+AWS_DYNAMODB_TABLE_NAME=aam_requests
+AWS_SQS_QUEUE_URL=your_sqs_queue_url
 
-**Configuration Tips:**
-- Adjust `RAG_TOP_K` (3-7) to control document count
-- Tune `RAG_SIMILARITY_THRESHOLD` (0.65-0.75) for precision/recall balance
+# Admin API Key (for admin endpoints)
+ADMIN_API_KEY=test-admin-key-change-in-production
+```
 
-**Knowledge Base:**
-- 35+ documents covering policies, SOPs, catalogs, SLAs
-- Located in `backend/kb/`
+### Step 3: Start All Microservices
+
+```bash
+# From infrastructure/docker directory
+docker-compose -f docker-compose.microservices.yml up -d
+```
+
+This starts:
+- **Request Management Service** on port `8001`
+- **AI Processing Service** on port `8002`
+- **Decision & Simulation Service** on port `8003`
+- **Execution Service** on port `8004`
+
+**Wait 30-60 seconds** for all services to start.
+
+### Step 4: Verify Services Are Running
+
+```bash
+# Check all services are healthy
+curl http://localhost:8001/health
+curl http://localhost:8002/health
+curl http://localhost:8003/health
+curl http://localhost:8004/health
+```
+
+Expected response: `{"status":"healthy","service":"..."}`
+
+### Step 5: Initialize ChromaDB (First Time Only)
+
+The Decision & Simulation service needs ChromaDB populated with knowledge base documents:
+
+```bash
+# Run ingestion inside the container
+docker exec -it decision-simulation-service python app/kb/ingest_documents.py
+```
+
+**Time:** 5-10 minutes (downloads embedding model and processes documents)
+
+**Verify ingestion:**
+```bash
+docker exec decision-simulation-service python -c "import chromadb; print('Documents:', chromadb.PersistentClient(path='/app/vector_stores/chroma_db').get_or_create_collection('apartment_kb').count())"
+```
+
+Expected: 400-500+ documents
+
+### Step 6: Start Frontend
+
+Open a **new terminal**:
+
+```bash
+cd frontend
+
+# Install dependencies (first time only)
+npm install
+
+# Start development server
+npm run dev
+```
+
+Frontend will be available at: `http://localhost:5173`
+
+### Step 7: Test from UI
+
+1. **Open browser:** `http://localhost:5173`
+
+2. **Select a resident** (or use default: `RES_Building123_1001`)
+
+3. **Submit a test request:**
+   - **Maintenance:** "My AC is broken and it's very hot outside"
+   - **Question:** "What is the parking policy for guests?"
+   - **Billing:** "I have a question about my rent payment"
+
+4. **Verify behavior:**
+   - Classification happens automatically as you type (after 2 seconds)
+   - Submit button is disabled while classifying
+   - Options are generated based on category/urgency
+   - For questions, direct answer is shown (not options)
+   - Source documents are displayed for RAG answers
+
+### Step 8: Check Service Logs (Optional)
+
+```bash
+# View all service logs
+cd infrastructure/docker
+docker-compose -f docker-compose.microservices.yml logs -f
+
+# View specific service logs
+docker-compose -f docker-compose.microservices.yml logs -f request-management
+docker-compose -f docker-compose.microservices.yml logs -f ai-processing
+docker-compose -f docker-compose.microservices.yml logs -f decision-simulation
+```
+
+### Step 9: Test API Endpoints Directly
+
+**Classify a message:**
+```bash
+curl -X POST http://localhost:8001/api/v1/classify \
+  -H "Content-Type: application/json" \
+  -d '{
+    "resident_id": "RES_Building123_1001",
+    "message_text": "My AC is broken"
+  }'
+```
+
+**Submit a full request:**
+```bash
+curl -X POST http://localhost:8001/api/v1/submit-request \
+  -H "Content-Type: application/json" \
+  -d '{
+    "resident_id": "RES_Building123_1001",
+    "message_text": "My AC is broken and it'\''s very hot outside"
+  }'
+```
+
+### Step 10: Stop Services
+
+```bash
+# Stop all services
+cd infrastructure/docker
+docker-compose -f docker-compose.microservices.yml down
+
+# Stop and remove volumes (clears ChromaDB data)
+docker-compose -f docker-compose.microservices.yml down -v
+```
+
+### Troubleshooting
+
+**Issue: Services won't start**
+- Check Docker is running: `docker ps`
+- Check ports 8001-8004 are not in use
+- Check `.env` file exists and has required variables
+
+**Issue: ChromaDB is empty**
+- Run ingestion: `docker exec -it decision-simulation-service python app/kb/ingest_documents.py`
+- Check KB files are mounted: `docker exec decision-simulation-service ls -la /app/kb`
+
+**Issue: Frontend can't connect to backend**
+- Verify services are running: `curl http://localhost:8001/health`
+- Check frontend `.env` has: `VITE_API_BASE_URL=http://localhost:8001`
+- Check browser console for CORS errors
+
+**Issue: Classification not working**
+- Check GEMINI_API_KEY is set in `.env`
+- Check AI Processing service logs: `docker-compose logs ai-processing`
+- Verify service is healthy: `curl http://localhost:8002/health`
+
+**Issue: RAG not finding documents**
+- Verify ChromaDB has documents (Step 5)
+- Check RAG_ENABLED=true in Decision & Simulation service
+- Check logs: `docker-compose logs decision-simulation | grep -i rag`
 
 ---
 
@@ -417,8 +319,6 @@ Once the backend is running, visit:
 ## Resources
 
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
-- [AWS Documentation](https://docs.aws.amazon.com/)
-- [AWS SQS Documentation](https://docs.aws.amazon.com/sqs/)
-- [AWS DynamoDB Documentation](https://docs.aws.amazon.com/dynamodb/)
-- [Railway.app Documentation](https://docs.railway.app/)
 - [Docker Documentation](https://docs.docker.com/)
+- [React Documentation](https://react.dev/)
+- [ChromaDB Documentation](https://docs.trychroma.com/)

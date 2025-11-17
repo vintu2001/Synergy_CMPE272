@@ -400,14 +400,8 @@ class RAGRetriever:
                 "type": {"$in": doc_types}
             })
         
-        # Category filter - be flexible with matching
-        # Don't filter by category since documents use specific subcategories
-        # like "maintenance_request", "maintenance_vendors" vs just "maintenance"
-        # The semantic search will handle relevance
         if category:
             logger.info(f"Category '{category}' provided - relying on semantic search for relevance")
-            # Note: Could map categories to subcategories if needed in future
-            # Semantic search handles this better than strict filtering
         
         # Combine filters with AND logic
         if len(filter_conditions) == 0:

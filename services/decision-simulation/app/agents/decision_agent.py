@@ -352,7 +352,7 @@ async def make_decision(
     start_time = time.time()
     
     try:
-        # Step 1: Retrieve decision rules from knowledge base (RAG integration)
+        # Retrieve decision rules from knowledge base
         rag_context = None
         rule_sources = []
         
@@ -395,7 +395,7 @@ async def make_decision(
         else:
             logger.info("RAG is disabled (RAG_ENABLED=false)")
         
-        # Step 2: Check for human escalation intent
+        # Check for human escalation intent
         if request.classification.intent == Intent.HUMAN_ESCALATION:
             response = create_escalation_decision(
                 request.classification,

@@ -49,10 +49,19 @@ async def submit_request(request: MessageRequest):
     request_id = generate_request_id()
     
     try:
-        logger.info(f"Processing request for resident: {request.resident_id}")
+        from app.utils.cloudwatch_logger import log_to_cloudwatch
+        
+        log_to_cloudwatch('request_submitted', {
+            'request_id': request_id,
+            'resident_id': request.resident_id,
+            'message_preview': request.message_text[:100] if len(request.message_text) > 100 else request.message_text,
+            'message_length': len(request.message_text)
+        })
+        
+        logger.info(f"Processing request {request_id} for resident: {request.resident_id}")
         _normalized_text = normalize_text(request.message_text)
         
-        # Step 1: Classification (AI Processing Service)
+        # Classification
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 classify_response = await client.post(
@@ -75,7 +84,16 @@ async def submit_request(request: MessageRequest):
         intent = Intent(classification_data["intent"])
         confidence = classification_data["confidence"]
         
-        # Step 1.5: Handle ANSWER_QUESTION intent - return direct answer via RAG
+        log_to_cloudwatch('request_classified', {
+            'request_id': request_id,
+            'resident_id': request.resident_id,
+            'category': final_category.value,
+            'urgency': final_urgency.value,
+            'intent': intent.value,
+            'confidence': round(confidence, 3)
+        })
+        
+        # Handle ANSWER_QUESTION intent - return direct answer via RAG
         if intent == Intent.ANSWER_QUESTION:
             logger.info(f"Intent is ANSWER_QUESTION - using RAG to answer directly")
             try:
@@ -134,7 +152,7 @@ async def submit_request(request: MessageRequest):
                 logger.error(f"Error answering question: {answer_error}")
                 # Fallback to normal flow
         
-        # Step 2: Risk Prediction (AI Processing Service)
+        # Risk Prediction
         risk_score = None
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
@@ -155,7 +173,7 @@ async def submit_request(request: MessageRequest):
         except Exception as risk_error:
             logger.warning(f"Risk prediction failed (non-critical): {risk_error}")
         
-        # Step 3: Generate Resolution Options (Decision & Simulation Service)
+        # Generate Resolution Options
         simulation_result = None
         simulated_options = None
         llm_generation_failed = False
@@ -318,9 +336,10 @@ async def submit_request(request: MessageRequest):
             except Exception as sqs_error:
                 logger.warning(f"SQS enqueue failed (non-critical): {sqs_error}")
         
-        # Step 4: Get AI recommendation (Decision & Simulation Service)
+        # Get AI recommendation
         recommended_option_id = None
         decision_data = None
+
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 decision_response = await client.post(
@@ -364,7 +383,22 @@ async def submit_request(request: MessageRequest):
         processing_time = (time.time() - start_time) * 1000
         logger.info(f"Request {request_id} processed in {processing_time:.2f}ms")
         
-        response = {
+
+        # Log request completion summary
+        log_to_cloudwatch('request_completed', {
+            'request_id': request_id,
+            'resident_id': request.resident_id,
+            'category': final_category.value,
+            'urgency': final_urgency.value,
+            'intent': intent.value,
+            'risk_score': round(risk_score, 3) if risk_score else None,
+            'options_count': len(simulated_options) if simulated_options else 0,
+            'recommended_option': recommended_option_id,
+            'processing_time_ms': round(processing_time, 2),
+            'status': 'success'
+        })
+        
+        return {
             "status": "submitted",
             "message": "Request submitted successfully!",
             "request_id": request_id,
@@ -385,12 +419,6 @@ async def submit_request(request: MessageRequest):
                 "is_recurring": is_recurring
             }
         }
-        
-        # Add decision data if available
-        if decision_data:
-            response["decision"] = decision_data
-        
-        return response
     except HTTPException:
         raise
     except Exception as e:
@@ -405,6 +433,8 @@ async def select_option(selection: SelectOptionRequest):
     This triggers execution.
     """
     try:
+        from app.utils.cloudwatch_logger import log_to_cloudwatch
+        
         # Get the request
         request = get_request_by_id(selection.request_id)
         if not request:
@@ -412,6 +442,12 @@ async def select_option(selection: SelectOptionRequest):
         
         # Special handling for human escalation
         if selection.selected_option_id == "escalate_to_human":
+            log_to_cloudwatch('request_escalated', {
+                'request_id': selection.request_id,
+                'escalation_type': 'manual',
+                'reason': 'User selected escalation option'
+            })
+            
             table = get_table()
             table.update_item(
                 Key={'request_id': selection.request_id},
@@ -449,6 +485,14 @@ async def select_option(selection: SelectOptionRequest):
         
         if not selected_option:
             raise HTTPException(status_code=400, detail="Invalid option ID")
+        
+        log_to_cloudwatch('option_selected', {
+            'request_id': selection.request_id,
+            'selected_option_id': selection.selected_option_id,
+            'option_action': selected_option.get('action', 'Unknown')[:100],
+            'estimated_cost': selected_option.get('estimated_cost'),
+            'estimated_time': selected_option.get('estimated_time')
+        })
         
         # Update request with user's selection
         table = get_table()
@@ -510,6 +554,8 @@ async def resolve_request(resolve_data: ResolveRequestModel):
     Mark a request as resolved by admin or resident.
     """
     try:
+        from app.utils.cloudwatch_logger import log_to_cloudwatch
+        
         # Get the request
         request = get_request_by_id(resolve_data.request_id)
         if not request:
@@ -533,6 +579,12 @@ async def resolve_request(resolve_data: ResolveRequestModel):
         )
         
         logger.info(f"Request {resolve_data.request_id} marked as resolved by {resolve_data.resolved_by}")
+        
+        log_to_cloudwatch('request_resolved', {
+            'request_id': resolve_data.request_id,
+            'resolved_by': resolve_data.resolved_by,
+            'resolution_notes': resolve_data.resolution_notes[:100] if resolve_data.resolution_notes else None
+        })
         
         return {
             "status": "success",

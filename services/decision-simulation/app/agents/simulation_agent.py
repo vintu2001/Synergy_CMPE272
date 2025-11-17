@@ -7,8 +7,8 @@ from fastapi import APIRouter, HTTPException
 from app.models.schemas import ClassificationResponse, SimulationResponse, SimulatedOption, IssueCategory, Urgency
 from app.utils.llm_client import llm_client
 from app.agents.tools import agent_tools
-from app.agents.reasoning_engine import multi_step_reasoner  # Level 3
-from app.agents.learning_engine import learning_engine  # Level 4
+from app.agents.reasoning_engine import multi_step_reasoner
+from app.agents.learning_engine import learning_engine
 from app.rag.retriever import retrieve_relevant_docs  # RAG integration
 from typing import List, Dict, Any, Optional
 import logging
@@ -30,8 +30,8 @@ class AgenticResolutionSimulator:
     def __init__(self):
         self.llm_client = llm_client
         self.agent_tools = agent_tools
-        self.multi_step_reasoner = multi_step_reasoner  # Level 3
-        self.learning_engine = learning_engine  # Level 4
+        self.multi_step_reasoner = multi_step_reasoner
+        self.learning_engine = learning_engine
     
     async def generate_options(
         self, 
@@ -63,7 +63,6 @@ class AgenticResolutionSimulator:
         logger.info(f"Generating agentic options for {category.value}/{urgency.value} (resident: {resident_id})")
         
         try:
-            # Step 1: Execute tools to gather real-time context (Level 2)
             tools_data = await self.agent_tools.execute_tools(
                 resident_id=resident_id,
                 category=category,
@@ -73,8 +72,7 @@ class AgenticResolutionSimulator:
             
             logger.info(f"Tools executed: {list(tools_data.keys())}")
             
-            # Step 2: Get learning insights from historical data (Level 4)
-            message_keywords = message_text.lower().split()[:10]  # First 10 words
+            message_keywords = message_text.lower().split()[:10]
             learning_insights = await self.learning_engine.get_learning_insights_for_request(
                 category=category.value,
                 urgency=urgency.value,
@@ -83,10 +81,8 @@ class AgenticResolutionSimulator:
             
             logger.info(f"Learning insights: {learning_insights.get('has_insights', False)}")
             
-            # Add learning insights to tools_data
             tools_data['learning_insights'] = learning_insights
             
-            # Step 3: Analyze complexity for multi-step reasoning (Level 3)
             complexity_analysis = await self.multi_step_reasoner.analyze_complexity(
                 message_text=message_text,
                 category=category.value,
@@ -96,7 +92,6 @@ class AgenticResolutionSimulator:
             
             logger.info(f"Complexity analysis: {complexity_analysis.get('reasoning_required', 'single_step')} (score: {complexity_analysis.get('complexity_score', 0):.2f})")
             
-            # Step 4: If complex (score > 0.7), generate multi-step reasoning chain (Level 3)
             if complexity_analysis.get('is_complex') and complexity_analysis.get('complexity_score', 0) > 0.7:
                 logger.info("Using multi-step reasoning for complex issue")
                 
@@ -130,7 +125,6 @@ class AgenticResolutionSimulator:
                         )
                         options.append(option)
                     
-                    # Extract is_recurring from tools data for multi-step reasoning path
                     is_recurring_from_tools = tools_data.get('recurring', {}).get('is_recurring', False)
                     
                     logger.info(f"Generated {len(options)} phased options from multi-step reasoning (is_recurring={is_recurring_from_tools})")
@@ -139,7 +133,6 @@ class AgenticResolutionSimulator:
                         'is_recurring': is_recurring_from_tools
                     }
             
-            # Step 5: Retrieve relevant documents from knowledge base (RAG integration)
             rag_context = None
             building_id = None
             
@@ -150,22 +143,18 @@ class AgenticResolutionSimulator:
                     building_id = parts[1]
                     logger.info(f"Extracted building_id: {building_id} from resident_id: {resident_id}")
             
-            # Check if RAG is enabled
             rag_enabled = os.getenv('RAG_ENABLED', 'false').lower() == 'true'
             
             if rag_enabled:
                 try:
-                    # Retrieve relevant documents for simulation context
-                    # Use lower similarity threshold (0.4) for better document retrieval
                     rag_context = await retrieve_relevant_docs(
                         query=message_text,
                         category=category.value,
                         building_id=building_id,
                         top_k=int(os.getenv('RAG_TOP_K', '5')),
-                        similarity_threshold=0.4  # Lower threshold to find more documents
+                        similarity_threshold=0.4
                     )
                     
-                    # If no docs found, try even lower threshold
                     if not rag_context or len(rag_context.retrieved_docs) == 0:
                         logger.warning(f"No RAG documents found with threshold 0.4, trying 0.3 for: '{message_text[:50]}...'")
                         rag_context = await retrieve_relevant_docs(
@@ -173,7 +162,7 @@ class AgenticResolutionSimulator:
                             category=category.value,
                             building_id=building_id,
                             top_k=int(os.getenv('RAG_TOP_K', '5')) * 2,
-                            similarity_threshold=0.3  # Very permissive
+                            similarity_threshold=0.3
                         )
                     
                     if rag_context:
@@ -187,8 +176,6 @@ class AgenticResolutionSimulator:
             else:
                 logger.info("RAG is disabled (RAG_ENABLED=false)")
             
-            # Step 6: Generate options using LLM with full context (Level 1)
-            # This is used for non-complex issues or as fallback
             llm_response = await self.llm_client.generate_options(
                 message_text=message_text,
                 category=category.value,
@@ -216,8 +203,6 @@ class AgenticResolutionSimulator:
                     }
                 )
             
-            # Step 7: Extract is_recurring from LLM response and tools data
-            # Priority: tools data > LLM response
             is_recurring_from_tools = tools_data.get('recurring', {}).get('is_recurring', False)
             is_recurring_from_llm = llm_response.get('is_recurring', False)
             is_recurring = is_recurring_from_tools or is_recurring_from_llm
@@ -227,15 +212,12 @@ class AgenticResolutionSimulator:
             if is_recurring_from_llm:
                 logger.info(f"Recurring issue detected by LLM")
             
-            # Step 8: Convert LLM response to SimulatedOption objects
+            # Convert LLM response to SimulatedOption objects
             # Extract source document IDs from RAG context
             source_doc_ids = []
             if rag_context and rag_context.retrieved_docs:
-                # Collect all document IDs from retrieved context
                 source_doc_ids = [doc['doc_id'] for doc in rag_context.retrieved_docs if 'doc_id' in doc]
             
-            # Step 8.1: Check for RAG fallback - if RAG enabled but no documents retrieved
-            # This indicates the system lacks knowledge base context for this request
             rag_fallback_needed = False
             if rag_enabled and (not rag_context or not rag_context.retrieved_docs or len(source_doc_ids) == 0):
                 logger.warning(f"RAG enabled but no KB documents retrieved for category={category.value}, building_id={building_id}")
@@ -278,7 +260,6 @@ class AgenticResolutionSimulator:
                 )
                 options.append(option)
             
-            # Step 7.2: Add human escalation option if RAG fallback needed
             if rag_fallback_needed:
                 escalation_option = SimulatedOption(
                     option_id=f"OPT_ESCALATE_{len(options) + 1}",
@@ -294,7 +275,6 @@ class AgenticResolutionSimulator:
             
             logger.info(f"Successfully generated {len(options)} agentic options with {len(source_doc_ids)} RAG sources (is_recurring={is_recurring}, rag_fallback={rag_fallback_needed})")
             
-            # Return both options and is_recurring flag
             return {
                 'options': options,
                 'is_recurring': is_recurring
@@ -329,367 +309,6 @@ class AgenticResolutionSimulator:
                     'escalation_required': True
                 }
             )
-    
-    # LEGACY METHOD - KEPT FOR REFERENCE, NOT USED
-    def _load_option_templates_DEPRECATED(self) -> Dict[str, Dict[str, List[Dict[str, Any]]]]:
-        """Load resolution option templates for each category and urgency level."""
-        return {
-            "Maintenance": {
-                "High": [
-                    {
-                        "action": "Dispatch Emergency Technician Immediately",
-                        "base_cost": 400,
-                        "base_time": 1.5,
-                        "base_satisfaction": 0.95,
-                        "resource_type": "emergency_tech"
-                    },
-                    {
-                        "action": "Schedule Urgent Repair (within 4 hours)",
-                        "base_cost": 250,
-                        "base_time": 4.0,
-                        "base_satisfaction": 0.85,
-                        "resource_type": "urgent_tech"
-                    },
-                    {
-                        "action": "Send Maintenance Staff for Temporary Fix",
-                        "base_cost": 100,
-                        "base_time": 2.0,
-                        "base_satisfaction": 0.65,
-                        "resource_type": "maintenance_staff"
-                    }
-                ],
-                "Medium": [
-                    {
-                        "action": "Schedule Standard Repair (next business day)",
-                        "base_cost": 180,
-                        "base_time": 24.0,
-                        "base_satisfaction": 0.75,
-                        "resource_type": "standard_tech"
-                    },
-                    {
-                        "action": "Add to Next Available Slot",
-                        "base_cost": 150,
-                        "base_time": 48.0,
-                        "base_satisfaction": 0.60,
-                        "resource_type": "standard_tech"
-                    },
-                    {
-                        "action": "Provide DIY Instructions and Monitor",
-                        "base_cost": 10,
-                        "base_time": 1.0,
-                        "base_satisfaction": 0.45,
-                        "resource_type": "support_staff"
-                    }
-                ],
-                "Low": [
-                    {
-                        "action": "Schedule Routine Maintenance Visit",
-                        "base_cost": 120,
-                        "base_time": 72.0,
-                        "base_satisfaction": 0.70,
-                        "resource_type": "standard_tech"
-                    },
-                    {
-                        "action": "Send DIY Video Tutorial",
-                        "base_cost": 5,
-                        "base_time": 0.5,
-                        "base_satisfaction": 0.50,
-                        "resource_type": "automated"
-                    },
-                    {
-                        "action": "Add to Monthly Inspection List",
-                        "base_cost": 20,
-                        "base_time": 168.0,
-                        "base_satisfaction": 0.40,
-                        "resource_type": "routine"
-                    }
-                ]
-            },
-            "Security": {
-                "High": [
-                    {
-                        "action": "Dispatch Security Team Immediately",
-                        "base_cost": 300,
-                        "base_time": 0.5,
-                        "base_satisfaction": 0.95,
-                        "resource_type": "security_team"
-                    },
-                    {
-                        "action": "Alert On-Site Security and Monitor",
-                        "base_cost": 100,
-                        "base_time": 1.0,
-                        "base_satisfaction": 0.85,
-                        "resource_type": "on_site_security"
-                    },
-                    {
-                        "action": "Initiate Lockdown Protocol",
-                        "base_cost": 500,
-                        "base_time": 0.25,
-                        "base_satisfaction": 0.90,
-                        "resource_type": "emergency_protocol"
-                    }
-                ],
-                "Medium": [
-                    {
-                        "action": "Schedule Security Assessment",
-                        "base_cost": 150,
-                        "base_time": 8.0,
-                        "base_satisfaction": 0.70,
-                        "resource_type": "security_team"
-                    },
-                    {
-                        "action": "Increase Patrol Frequency",
-                        "base_cost": 80,
-                        "base_time": 4.0,
-                        "base_satisfaction": 0.65,
-                        "resource_type": "on_site_security"
-                    },
-                    {
-                        "action": "Send Security Reminder Email",
-                        "base_cost": 5,
-                        "base_time": 0.5,
-                        "base_satisfaction": 0.45,
-                        "resource_type": "automated"
-                    }
-                ],
-                "Low": [
-                    {
-                        "action": "Add to Next Security Walkthrough",
-                        "base_cost": 50,
-                        "base_time": 48.0,
-                        "base_satisfaction": 0.60,
-                        "resource_type": "routine"
-                    },
-                    {
-                        "action": "Send Security Best Practices Guide",
-                        "base_cost": 5,
-                        "base_time": 0.25,
-                        "base_satisfaction": 0.50,
-                        "resource_type": "automated"
-                    }
-                ]
-            },
-            "Billing": {
-                "High": [
-                    {
-                        "action": "Immediate Manager Review and Adjustment",
-                        "base_cost": 50,
-                        "base_time": 2.0,
-                        "base_satisfaction": 0.90,
-                        "resource_type": "manager"
-                    },
-                    {
-                        "action": "Expedited Billing Audit",
-                        "base_cost": 30,
-                        "base_time": 4.0,
-                        "base_satisfaction": 0.80,
-                        "resource_type": "billing_specialist"
-                    },
-                    {
-                        "action": "Apply Credit and Investigate",
-                        "base_cost": 20,
-                        "base_time": 1.0,
-                        "base_satisfaction": 0.85,
-                        "resource_type": "billing_staff"
-                    }
-                ],
-                "Medium": [
-                    {
-                        "action": "Standard Billing Review",
-                        "base_cost": 25,
-                        "base_time": 24.0,
-                        "base_satisfaction": 0.70,
-                        "resource_type": "billing_staff"
-                    },
-                    {
-                        "action": "Automated System Check",
-                        "base_cost": 5,
-                        "base_time": 1.0,
-                        "base_satisfaction": 0.60,
-                        "resource_type": "automated"
-                    },
-                    {
-                        "action": "Schedule Payment Plan Consultation",
-                        "base_cost": 15,
-                        "base_time": 48.0,
-                        "base_satisfaction": 0.65,
-                        "resource_type": "billing_staff"
-                    }
-                ],
-                "Low": [
-                    {
-                        "action": "Send Billing Explanation Email",
-                        "base_cost": 5,
-                        "base_time": 0.5,
-                        "base_satisfaction": 0.55,
-                        "resource_type": "automated"
-                    },
-                    {
-                        "action": "Add to Next Billing Cycle Review",
-                        "base_cost": 10,
-                        "base_time": 168.0,
-                        "base_satisfaction": 0.50,
-                        "resource_type": "routine"
-                    }
-                ]
-            },
-            "Deliveries": {
-                "High": [
-                    {
-                        "action": "Immediate Package Location and Delivery",
-                        "base_cost": 50,
-                        "base_time": 1.0,
-                        "base_satisfaction": 0.90,
-                        "resource_type": "concierge"
-                    },
-                    {
-                        "action": "Alert Concierge to Prioritize Search",
-                        "base_cost": 20,
-                        "base_time": 2.0,
-                        "base_satisfaction": 0.75,
-                        "resource_type": "concierge"
-                    }
-                ],
-                "Medium": [
-                    {
-                        "action": "Check Package Room and Notify",
-                        "base_cost": 15,
-                        "base_time": 4.0,
-                        "base_satisfaction": 0.70,
-                        "resource_type": "concierge"
-                    },
-                    {
-                        "action": "Contact Carrier for Update",
-                        "base_cost": 10,
-                        "base_time": 8.0,
-                        "base_satisfaction": 0.60,
-                        "resource_type": "support_staff"
-                    },
-                    {
-                        "action": "Send Delivery Tracking Information",
-                        "base_cost": 5,
-                        "base_time": 0.5,
-                        "base_satisfaction": 0.55,
-                        "resource_type": "automated"
-                    }
-                ],
-                "Low": [
-                    {
-                        "action": "Add to Next Concierge Rounds",
-                        "base_cost": 10,
-                        "base_time": 24.0,
-                        "base_satisfaction": 0.50,
-                        "resource_type": "routine"
-                    },
-                    {
-                        "action": "Send Package Pickup Instructions",
-                        "base_cost": 5,
-                        "base_time": 0.25,
-                        "base_satisfaction": 0.45,
-                        "resource_type": "automated"
-                    }
-                ]
-            },
-            "Amenities": {
-                "High": [
-                    {
-                        "action": "Immediate Staff Response and Resolution",
-                        "base_cost": 80,
-                        "base_time": 1.0,
-                        "base_satisfaction": 0.85,
-                        "resource_type": "amenities_staff"
-                    },
-                    {
-                        "action": "Temporary Closure and Alternative Arrangement",
-                        "base_cost": 50,
-                        "base_time": 2.0,
-                        "base_satisfaction": 0.70,
-                        "resource_type": "amenities_staff"
-                    }
-                ],
-                "Medium": [
-                    {
-                        "action": "Schedule Amenity Maintenance Check",
-                        "base_cost": 40,
-                        "base_time": 12.0,
-                        "base_satisfaction": 0.65,
-                        "resource_type": "amenities_staff"
-                    },
-                    {
-                        "action": "Update Amenity Schedule and Notify Residents",
-                        "base_cost": 10,
-                        "base_time": 1.0,
-                        "base_satisfaction": 0.60,
-                        "resource_type": "support_staff"
-                    }
-                ],
-                "Low": [
-                    {
-                        "action": "Send Amenity Hours and Rules Guide",
-                        "base_cost": 5,
-                        "base_time": 0.25,
-                        "base_satisfaction": 0.60,
-                        "resource_type": "automated"
-                    },
-                    {
-                        "action": "Add to Community Newsletter",
-                        "base_cost": 5,
-                        "base_time": 72.0,
-                        "base_satisfaction": 0.45,
-                        "resource_type": "routine"
-                    },
-                    {
-                        "action": "Post Information on Resident Portal",
-                        "base_cost": 5,
-                        "base_time": 0.5,
-                        "base_satisfaction": 0.55,
-                        "resource_type": "automated"
-                    }
-                ]
-            }
-        }
-    
-    def simulate_resolution_process(self, template: Dict[str, Any], risk_score: float) -> Dict[str, float]:
-        """
-        Simulate a resolution option using SimPy.
-        Adjusts parameters based on risk score.
-        """
-        env = simpy.Environment()
-        
-        results = {
-            'cost': template['base_cost'],
-            'time': template['base_time'],
-            'satisfaction': template['base_satisfaction']
-        }
-        
-        def resolution_process(env):
-            travel_time = random.uniform(0.1, 0.5) if template['resource_type'] != 'automated' else 0
-            yield env.timeout(travel_time)
-            
-            work_time = template['base_time'] * random.uniform(0.8, 1.2)
-            yield env.timeout(work_time)
-            
-            results['time'] = travel_time + work_time
-        
-        env.process(resolution_process(env))
-        env.run()
-        
-        # Adjust based on risk score
-        if risk_score > 0.7:
-            results['cost'] *= 1.2
-            results['time'] *= 0.9
-            results['satisfaction'] = min(results['satisfaction'] * 1.05, 1.0)
-        elif risk_score < 0.4:
-            results['cost'] *= 0.85
-            results['time'] *= 1.1
-            results['satisfaction'] *= 0.95
-        
-        # Add slight randomness
-        results['cost'] *= random.uniform(0.95, 1.05)
-        results['time'] *= random.uniform(0.9, 1.1)
-        results['satisfaction'] = min(max(results['satisfaction'] * random.uniform(0.95, 1.02), 0.0), 1.0)
-        
-        return results
 
 
 # Global instance - AGENTIC simulator

@@ -43,9 +43,5 @@ This directory contains the 4 microservices for the Agentic Apartment Manager sy
 
 ## Quick Start
 
-See [DEPLOYMENT_GUIDE.md](../DEPLOYMENT_GUIDE.md) for detailed deployment instructions.
-
-## Migration
-
-See [MIGRATION_HELPER.md](../MIGRATION_HELPER.md) for help moving code from monolith to microservices.
+For local testing, see the main [README.md](../README.md) for detailed instructions.
 

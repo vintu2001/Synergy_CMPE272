@@ -355,13 +355,11 @@ async def classify_message(request: MessageRequest) -> ClassificationResponse:
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.INFO)
     
-    # Phase 1: Try rule-based classification (fast)
     category, urgency, intent, confidence = rule_based_classification(request.message_text)
     
     logger.info(f"[CLASSIFY] Message: '{request.message_text[:50]}...'")
     logger.info(f"[CLASSIFY] Rule-based: category={category}, urgency={urgency}, intent={intent}, confidence={confidence}")
     
-    # Phase 2: If confidence is low or missing critical info, use Gemini
     if confidence < 0.7 or category is None or urgency is None:
         logger.info(f"[CLASSIFY] Confidence {confidence} < 0.7 - Triggering Gemini fallback")
         try:
@@ -378,7 +376,6 @@ async def classify_message(request: MessageRequest) -> ClassificationResponse:
                     intent=intent,
                     confidence=confidence
                 )
-            # Ultimate fallback
             return ClassificationResponse(
                 category=IssueCategory.MAINTENANCE,
                 urgency=Urgency.MEDIUM,
@@ -386,7 +383,6 @@ async def classify_message(request: MessageRequest) -> ClassificationResponse:
                 confidence=0.5
             )
     
-    # Phase 3: Return rule-based result with high confidence
     logger.info(f"[CLASSIFY] Using rule-based result (confidence={confidence} >= 0.7)")
     return ClassificationResponse(
         category=category,
