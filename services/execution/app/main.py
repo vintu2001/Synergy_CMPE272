@@ -14,7 +14,6 @@ from app.models.schemas import HealthCheck
 from app.utils.cloudwatch_logger import setup_cloudwatch_logging, log_to_cloudwatch
 import time
 
-# Configure logging
 logging.basicConfig(
     level=os.getenv('LOG_LEVEL', 'INFO'),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -27,7 +26,6 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Initialize CloudWatch logging
 setup_cloudwatch_logging()
 
 app.add_middleware(
@@ -38,7 +36,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Request logging middleware
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     start_time = time.time()
@@ -75,7 +72,6 @@ async def root():
 async def health_check():
     return {"status": "healthy", "service": "Execution Service"}
 
-# Import routers
 from app.api import routes
 
 app.include_router(routes.router, prefix="/api/v1", tags=["execution"])

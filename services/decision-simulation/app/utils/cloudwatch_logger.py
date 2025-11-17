@@ -1,6 +1,3 @@
-"""
-CloudWatch Logger - Send structured logs to AWS CloudWatch
-"""
 import boto3
 import json
 import os
@@ -222,3 +219,14 @@ def log_governance_decision(
         'estimated_cost': estimated_cost,
         'estimated_time': estimated_time
     })
+
+
+def setup_cloudwatch_logging():
+    """Initialize CloudWatch logging on service startup"""
+    if CLOUDWATCH_ENABLED:
+        ensure_log_stream()
+        log_to_cloudwatch('service_startup', {
+            'service': 'decision-simulation',
+            'message': 'Decision Simulation Service started',
+            'log_level': os.getenv('LOG_LEVEL', 'INFO')
+        })

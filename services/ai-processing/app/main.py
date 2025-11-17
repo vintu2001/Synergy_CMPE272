@@ -72,7 +72,6 @@ async def root():
 async def health_check():
     return {"status": "healthy", "service": "AI Processing Service"}
 
-# Import routers
 from app.api import routes
 
 app.include_router(routes.router, prefix="/api/v1", tags=["ai"])

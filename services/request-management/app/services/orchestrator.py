@@ -51,7 +51,6 @@ async def submit_request(request: MessageRequest):
     try:
         from app.utils.cloudwatch_logger import log_to_cloudwatch
         
-        # Log detailed request submission
         log_to_cloudwatch('request_submitted', {
             'request_id': request_id,
             'resident_id': request.resident_id,
@@ -85,7 +84,6 @@ async def submit_request(request: MessageRequest):
         intent = Intent(classification_data["intent"])
         confidence = classification_data["confidence"]
         
-        # Log classification results
         log_to_cloudwatch('request_classified', {
             'request_id': request_id,
             'resident_id': request.resident_id,
@@ -480,7 +478,6 @@ async def select_option(selection: SelectOptionRequest):
         if not selected_option:
             raise HTTPException(status_code=400, detail="Invalid option ID")
         
-        # Log option selection to CloudWatch
         log_to_cloudwatch('option_selected', {
             'request_id': selection.request_id,
             'selected_option_id': selection.selected_option_id,
@@ -575,7 +572,6 @@ async def resolve_request(resolve_data: ResolveRequestModel):
         
         logger.info(f"Request {resolve_data.request_id} marked as resolved by {resolve_data.resolved_by}")
         
-        # Log resolution to CloudWatch
         log_to_cloudwatch('request_resolved', {
             'request_id': resolve_data.request_id,
             'resolved_by': resolve_data.resolved_by,

@@ -8,6 +8,7 @@ import os
 import logging
 from datetime import datetime
 from typing import Dict, Any, Optional
+from decimal import Decimal
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,17 @@ def ensure_log_stream():
         return False
 
 
+def convert_decimal(obj):
+    """Convert Decimal objects to float for JSON serialization"""
+    if isinstance(obj, Decimal):
+        return float(obj)
+    elif isinstance(obj, dict):
+        return {k: convert_decimal(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_decimal(i) for i in obj]
+    return obj
+
+
 def log_to_cloudwatch(event_type: str, data: Dict[str, Any]):
     """Send structured log to CloudWatch"""
     global sequence_token
@@ -63,11 +75,14 @@ def log_to_cloudwatch(event_type: str, data: Dict[str, Any]):
         return
     
     try:
+        # Convert any Decimal objects to float
+        clean_data = convert_decimal(data)
+        
         log_entry = {
             'timestamp': datetime.utcnow().isoformat(),
             'service': 'request-management',
             'event_type': event_type,
-            **data
+            **clean_data
         }
         
         log_event = {

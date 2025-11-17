@@ -25,7 +25,6 @@ async def alert_on_call_manager(decision: DecisionResponse):
     
     logger.info(f"ESCALATION ALERT: {decision.reasoning} at {datetime.now()}")
     
-    # Log to CloudWatch with full details
     log_to_cloudwatch('escalation_executed', {
         'alert_id': alert_id,
         'action': decision.chosen_action,
@@ -48,7 +47,6 @@ async def dispatch_maintenance(decision: DecisionResponse):
     
     logger.info(f"Maintenance dispatched: {decision.chosen_action} - Work Order: {work_order_id}")
     
-    # Log to CloudWatch with full details
     log_to_cloudwatch('maintenance_dispatched', {
         'work_order_id': work_order_id,
         'action': decision.chosen_action,
@@ -71,7 +69,6 @@ async def reroute_package(decision: DecisionResponse):
     
     logger.info(f"Package rerouted: {decision.chosen_action} - Tracking: {tracking_number}")
     
-    # Log to CloudWatch with full details
     log_to_cloudwatch('package_rerouted', {
         'tracking_number': tracking_number,
         'action': decision.chosen_action,
@@ -91,9 +88,8 @@ async def reroute_package(decision: DecisionResponse):
 async def send_billing_notification(decision: DecisionResponse):
     notification_id = f"BILL_{datetime.now().strftime('%Y%m%d%H%M%S')}"
     
-    logger.info(f"Billing notification sent: {decision.chosen_action} - ID: {notification_id}")
+    logger.info(f"Billing notification sent: {decision.chosen_action} - Notification ID: {notification_id}")
     
-    # Log to CloudWatch with full details
     log_to_cloudwatch('billing_notification_sent', {
         'notification_id': notification_id,
         'action': decision.chosen_action,
