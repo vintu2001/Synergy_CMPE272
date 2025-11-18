@@ -304,15 +304,6 @@ docker-compose -f docker-compose.microservices.yml down -v
 - Check RAG_ENABLED=true in Decision & Simulation service
 - Check logs: `docker-compose logs decision-simulation | grep -i rag`
 
----
-
-## Deployment Documentation
-
-- **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** - Complete deployment guide for Railway + EC2
-- **[MICROSERVICES_ARCHITECTURE_PLAN.md](MICROSERVICES_ARCHITECTURE_PLAN.md)** - Architecture design and reasoning
-- **[FILE_STRUCTURE_MIGRATION_PLAN.md](FILE_STRUCTURE_MIGRATION_PLAN.md)** - File structure changes
-- **[CHROMADB_AND_DEPLOYMENT_OPTIONS.md](CHROMADB_AND_DEPLOYMENT_OPTIONS.md)** - ChromaDB alternatives and deployment options
-- **[FREE_DEPLOYMENT_PLATFORMS.md](FREE_DEPLOYMENT_PLATFORMS.md)** - Free platform comparison
 
 ---
 
