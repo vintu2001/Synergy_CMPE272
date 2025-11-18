@@ -2,8 +2,7 @@ pytest
 pytest-asyncio
 pytest-mock
 pytest-cov
+pytest-benchmark
 httpx
-fastapi
-boto3
-locust
 psutil
+locust

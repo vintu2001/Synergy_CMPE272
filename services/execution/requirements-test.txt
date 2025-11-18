@@ -5,3 +5,6 @@ pytest-cov
 boto3
 fastapi
 pydantic
+locust
+psutil
+httpx

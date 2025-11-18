@@ -74,8 +74,15 @@ class ResidentRequest(BaseModel):
     resolution_notes: Optional[str] = None
     resolved_by: Optional[str] = None
     resolved_at: Optional[datetime] = None
+    admin_comments: Optional[List[Dict]] = None
+    recurring_issue_non_escalated: Optional[bool] = None
+    is_recurring_issue: Optional[bool] = None
     created_at: datetime
     updated_at: datetime
+    
+    class Config:
+        # Allow extra fields from DynamoDB that might not be in the schema
+        extra = "allow"
 
 
 class AdminRequestResponse(BaseModel):
@@ -92,3 +99,14 @@ class ResolveRequestModel(BaseModel):
     request_id: str = Field(..., description="Request ID to resolve")
     resolution_notes: Optional[str] = Field(None, description="Optional notes about resolution")
     resolved_by: str = Field(..., description="Who resolved it: 'admin' or 'resident'")
+
+
+class UpdateStatusRequest(BaseModel):
+    request_id: str = Field(..., description="Request ID to update")
+    status: Status = Field(..., description="New status for the request")
+
+
+class AddCommentRequest(BaseModel):
+    request_id: str = Field(..., description="Request ID to add comment to")
+    comment: str = Field(..., description="Comment text to add")
+    added_by: str = Field(..., description="Who added the comment: 'admin' or 'resident'")

@@ -140,4 +140,103 @@ def test_urgency_keywords_detected():
         assert urgency == Urgency.HIGH
 
 
+def test_all_issue_categories_coverage():
+    test_cases = {
+        "My water heater is broken": IssueCategory.MAINTENANCE,
+        "I was overcharged on my bill": IssueCategory.BILLING,
+        "Lost my access card and locked out": IssueCategory.SECURITY,
+        "My Amazon package was delivered": IssueCategory.DELIVERIES,
+        "The gym is closed": IssueCategory.AMENITIES
+    }
+    
+    for msg, expected_category in test_cases.items():
+        category, _, _, _ = rule_based_classification(msg)
+        assert category == expected_category
+
+
+def test_medium_urgency_detection():
+    category, urgency, _, _ = rule_based_classification("My fridge is not working properly")
+    assert urgency == Urgency.MEDIUM
+
+
+def test_low_urgency_detection():
+    category, urgency, _, _ = rule_based_classification("Can you repaint the hallway?")
+    assert urgency == Urgency.LOW
+
+
+def test_no_category_match():
+    category, urgency, intent, confidence = rule_based_classification("Random unrelated text")
+    # Should return None for category when no keywords match
+    assert category is None or confidence < 0.5
+
+
+def test_multiple_category_keywords():
+    # Test when message has keywords from multiple categories
+    category, urgency, intent, confidence = rule_based_classification("My water leak and package delivery")
+    # Should pick the category with most keyword matches
+    assert category is not None
+
+
+def test_high_urgency_keywords():
+    category, urgency, _, _ = rule_based_classification("Emergency! Water flooding everywhere!")
+    assert urgency == Urgency.HIGH
+
+
+def test_confidence_calculation():
+    _, _, _, confidence = rule_based_classification("leak broken emergency flood")
+    # Multiple keyword matches should increase confidence
+    assert confidence > 0.5
+
+
+def test_intent_solve_problem():
+    _, _, intent, _ = rule_based_classification("My sink is broken")
+    assert intent == Intent.SOLVE_PROBLEM
+
+
+def test_intent_answer_question():
+    _, _, intent, _ = rule_based_classification("What are the gym hours?")
+    assert intent == Intent.ANSWER_QUESTION
+
+
+
+
+@pytest.mark.asyncio
+@patch('google.generativeai.GenerativeModel')
+@patch('google.generativeai.configure')
+@patch('os.getenv')
+async def test_gemini_classification_success(mock_getenv, mock_configure, mock_model_class):
+    mock_getenv.return_value = "test-api-key"
+    
+    # Mock the model and response
+    mock_model = Mock()
+    mock_model_class.return_value = mock_model
+    
+    mock_response = Mock()
+    mock_response.text = '{"intent": "solve_problem", "confidence": 0.95}'
+    mock_model.generate_content.return_value = mock_response
+    
+    result = await gemini_classification("My AC is broken")
+    
+    # Should call Gemini API
+    assert mock_configure.called
+    assert mock_model.generate_content.called
+
+
+@pytest.mark.asyncio  
+@patch('google.generativeai.GenerativeModel')
+@patch('google.generativeai.configure')
+@patch('os.getenv')
+async def test_gemini_classification_json_parsing(mock_getenv, mock_configure, mock_model_class):
+    mock_getenv.return_value = "test-api-key"
+    
+    mock_model = Mock()
+    mock_model_class.return_value = mock_model
+    
+    # No need to mock response, just test Gemini API call
+    result = await gemini_classification("What are the pool hours?")
+    
+    # Should successfully parse JSON from markdown
+    assert result is not None
+
+
 

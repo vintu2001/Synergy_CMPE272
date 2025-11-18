@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, Shield, User, Building2, KeyRound } from "lucide-react";
+import { ArrowRight, Shield, User, Building2, KeyRound, Sparkles, BarChart3, Zap, MessageSquare, CheckCircle2, Clock, TrendingUp } from "lucide-react";
 import { useUser } from "../context/UserContext";
 
 export default function Home() {
@@ -42,22 +42,124 @@ export default function Home() {
   };
 
   return (
-    <div className="w-full min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center py-12 px-4">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <p className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-1 text-sm font-semibold text-white shadow-lg dark:bg-slate-200 dark:text-slate-900">
-            <Building2 className="h-4 w-4" />
-            Synergy Resident Portal
-          </p>
-          <h1 className="mt-6 text-3xl font-semibold text-slate-900 dark:text-white">
-            {isAdminView ? "Admin Login" : "Resident Login"}
-          </h1>
-          <p className="mt-3 text-base text-slate-600 dark:text-slate-300">
-            {isAdminView
-              ? "Access the admin console to manage escalations and resolve issues."
-              : "Submit service requests and track the progress of your apartment services."}
-          </p>
-        </div>
+    <div className="w-full min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex items-center py-12 px-4">
+      <div className="w-full max-w-7xl mx-auto">
+        <div className="grid lg:grid-cols-[1.2fr_1fr] gap-8 lg:gap-12 items-center">
+          {/* Left Side - Hero & Details */}
+          <div className="space-y-6">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-1.5 text-sm font-semibold text-white shadow-lg dark:bg-slate-200 dark:text-slate-900 mb-4">
+                <Building2 className="h-4 w-4" />
+                Synergy Apartment Portal
+              </div>
+              <h1 className="text-3xl md:text-4xl font-bold text-slate-900 dark:text-white mb-3">
+                AI-Powered Apartment Management
+              </h1>
+              <p className="text-base md:text-lg text-slate-600 dark:text-slate-300 mb-6">
+                Intelligent service request management with AI-driven classification, risk prediction, and automated resolution options.
+              </p>
+            </div>
+
+            {/* Key Features - Compact */}
+            <div className="space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="rounded-lg bg-emerald-100 p-2.5 dark:bg-emerald-900/30 flex-shrink-0">
+                  <Sparkles className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-slate-900 dark:text-white mb-0.5">
+                    AI-Powered Classification
+                  </h3>
+                  <p className="text-xs text-slate-600 dark:text-slate-300">
+                    Automatically categorizes requests and determines urgency using machine learning.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className="rounded-lg bg-blue-100 p-2.5 dark:bg-blue-900/30 flex-shrink-0">
+                  <TrendingUp className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-slate-900 dark:text-white mb-0.5">
+                    Risk Prediction
+                  </h3>
+                  <p className="text-xs text-slate-600 dark:text-slate-300">
+                    Identifies recurring issues and predicts risks to prioritize urgent matters.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className="rounded-lg bg-purple-100 p-2.5 dark:bg-purple-900/30 flex-shrink-0">
+                  <Zap className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-slate-900 dark:text-white mb-0.5">
+                    Automated Solutions
+                  </h3>
+                  <p className="text-xs text-slate-600 dark:text-slate-300">
+                    Generates resolution options with cost, time, and satisfaction estimates.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className="rounded-lg bg-amber-100 p-2.5 dark:bg-amber-900/30 flex-shrink-0">
+                  <MessageSquare className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-slate-900 dark:text-white mb-0.5">
+                    Real-Time Communication
+                  </h3>
+                  <p className="text-xs text-slate-600 dark:text-slate-300">
+                    Admins can update statuses and add comments for transparent communication.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Stats - Compact */}
+            <div className="grid grid-cols-3 gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
+              <div className="text-center">
+                <div className="text-xl font-bold text-slate-900 dark:text-white">RAG</div>
+                <div className="text-[10px] text-slate-600 dark:text-slate-400 mt-0.5">Enhanced</div>
+              </div>
+              <div className="text-center">
+                <div className="text-xl font-bold text-slate-900 dark:text-white">5+</div>
+                <div className="text-[10px] text-slate-600 dark:text-slate-400 mt-0.5">Categories</div>
+              </div>
+              <div className="text-center">
+                <div className="text-xl font-bold text-slate-900 dark:text-white">3</div>
+                <div className="text-[10px] text-slate-600 dark:text-slate-400 mt-0.5">Options</div>
+              </div>
+              <div className="text-center">
+                <div className="text-xl font-bold text-slate-900 dark:text-white">35+</div>
+                <div className="text-[10px] text-slate-600 dark:text-slate-400 mt-0.5">Policy Docs</div>
+              </div>
+              <div className="text-center">
+                <div className="text-xl font-bold text-slate-900 dark:text-white">24/7</div>
+                <div className="text-[10px] text-slate-600 dark:text-slate-400 mt-0.5">Available</div>
+              </div>
+              <div className="text-center">
+                <div className="text-xl font-bold text-slate-900 dark:text-white">95%</div>
+                <div className="text-[10px] text-slate-600 dark:text-slate-400 mt-0.5">Accuracy</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Side - Login Forms */}
+          <div className="w-full">
+            <div className="text-center mb-6">
+              <h2 className="text-2xl font-semibold text-slate-900 dark:text-white">
+                {isAdminView ? "Admin Console" : "Resident Portal"}
+              </h2>
+              <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+                {isAdminView
+                  ? "Manage requests, update statuses, and communicate with residents."
+                  : "Submit service requests and track progress in real-time."}
+              </p>
+            </div>
 
         {!isAdminView ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-lg dark:border-slate-800 dark:bg-slate-900">
@@ -163,6 +265,8 @@ export default function Home() {
             </div>
           </div>
         )}
+          </div>
+        </div>
       </div>
     </div>
   );
