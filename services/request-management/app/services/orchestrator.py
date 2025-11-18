@@ -452,11 +452,12 @@ async def select_option(selection: SelectOptionRequest):
             raise HTTPException(status_code=404, detail="Request not found")
         
         # Special handling for human escalation
-        if selection.selected_option_id == "escalate_to_human":
+        if selection.selected_option_id == "escalate_to_human" or selection.selected_option_id == "escalate_to_admin_recurring":
+            escalation_type = "recurring_issue" if selection.selected_option_id == "escalate_to_admin_recurring" else "manual"
             log_to_cloudwatch('request_escalated', {
                 'request_id': selection.request_id,
-                'escalation_type': 'manual',
-                'reason': 'User selected escalation option'
+                'escalation_type': escalation_type,
+                'reason': 'User selected escalation option' if escalation_type == "manual" else 'Recurring issue - user selected admin escalation'
             })
             
             table = get_table()
@@ -465,22 +466,24 @@ async def select_option(selection: SelectOptionRequest):
                 UpdateExpression='SET user_selected_option_id = :sel_opt, #status = :status, updated_at = :updated',
                 ExpressionAttributeNames={'#status': 'status'},
                 ExpressionAttributeValues={
-                    ':sel_opt': "escalate_to_human",
+                    ':sel_opt': selection.selected_option_id,
                     ':status': Status.ESCALATED.value,
                     ':updated': datetime.now(timezone.utc).isoformat()
                 }
             )
             
+            message = "Your request has been escalated to an administrator. They will review this recurring issue and work on a permanent solution. You'll receive a response within 24 hours." if escalation_type == "recurring_issue" else "Your request has been escalated to a human staff member. You'll receive a response within 24 hours."
+            
             return {
                 "status": "escalated",
-                "message": "Your request has been escalated to a human staff member. You'll receive a response within 24 hours.",
+                "message": message,
                 "request_id": selection.request_id,
                 "selected_option": {
-                    "option_id": "escalate_to_human",
-                    "action": "Escalate to Human Support",
+                    "option_id": selection.selected_option_id,
+                    "action": "Escalate to Admin" if escalation_type == "recurring_issue" else "Escalate to Human Support",
                     "estimated_cost": 0,
                     "estimated_time": 24.0,
-                    "reasoning": "Manual escalation requested by resident"
+                    "reasoning": "Recurring issue - admin escalation for permanent fix" if escalation_type == "recurring_issue" else "Manual escalation requested by resident"
                 }
             }
         
@@ -497,25 +500,62 @@ async def select_option(selection: SelectOptionRequest):
         if not selected_option:
             raise HTTPException(status_code=400, detail="Invalid option ID")
         
+        # Check if this is a recurring issue and user chose non-escalation option
+        # We need to check if the request was marked as recurring
+        # Since is_recurring is in simulation response, we'll check if escalate_to_admin_recurring was in options
+        is_recurring_issue = False
+        recurring_issue_non_escalated = False
+        
+        # Check if escalate_to_admin_recurring option exists in simulated_options (indicates recurring issue)
+        has_recurring_escalation_option = any(
+            opt.get('option_id') == 'escalate_to_admin_recurring' 
+            for opt in simulated_options
+        )
+        
+        if has_recurring_escalation_option and selection.selected_option_id != "escalate_to_admin_recurring":
+            is_recurring_issue = True
+            recurring_issue_non_escalated = True
+            logger.warning(
+                f"Recurring issue detected: User {request.get('resident_id')} chose option {selection.selected_option_id} "
+                f"instead of escalating to admin for recurring issue {selection.request_id}"
+            )
+            log_to_cloudwatch('recurring_issue_non_escalated', {
+                'request_id': selection.request_id,
+                'resident_id': request.get('resident_id'),
+                'selected_option_id': selection.selected_option_id,
+                'selected_option_action': selected_option.get('action', 'Unknown')[:100],
+                'message': 'User chose non-escalation option for recurring issue - admin should check with user'
+            })
+        
         log_to_cloudwatch('option_selected', {
             'request_id': selection.request_id,
             'selected_option_id': selection.selected_option_id,
             'option_action': selected_option.get('action', 'Unknown')[:100],
             'estimated_cost': selected_option.get('estimated_cost'),
-            'estimated_time': selected_option.get('estimated_time')
+            'estimated_time': selected_option.get('estimated_time'),
+            'is_recurring_issue': is_recurring_issue,
+            'recurring_issue_non_escalated': recurring_issue_non_escalated
         })
         
         # Update request with user's selection
         table = get_table()
+        update_expression = 'SET user_selected_option_id = :sel_opt, #status = :status, updated_at = :updated'
+        expression_values = {
+            ':sel_opt': selection.selected_option_id,
+            ':status': Status.IN_PROGRESS.value,
+            ':updated': datetime.now(timezone.utc).isoformat()
+        }
+        
+        # Add recurring_issue_non_escalated flag if applicable
+        if recurring_issue_non_escalated:
+            update_expression += ', recurring_issue_non_escalated = :recurring_flag'
+            expression_values[':recurring_flag'] = True
+        
         table.update_item(
             Key={'request_id': selection.request_id},
-            UpdateExpression='SET user_selected_option_id = :sel_opt, #status = :status, updated_at = :updated',
+            UpdateExpression=update_expression,
             ExpressionAttributeNames={'#status': 'status'},
-            ExpressionAttributeValues={
-                ':sel_opt': selection.selected_option_id,
-                ':status': Status.IN_PROGRESS.value,
-                ':updated': datetime.now(timezone.utc).isoformat()
-            }
+            ExpressionAttributeValues=expression_values
         )
         
         # Execute the selected option (Execution Service)

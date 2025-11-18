@@ -104,7 +104,6 @@ class AgenticResolutionSimulator:
                     complexity_analysis=complexity_analysis
                 )
                 
-                # Generate phased options from reasoning chain
                 phased_options = await self.multi_step_reasoner.create_phased_options(
                     reasoning_chain=reasoning_chain,
                     category=category.value,
@@ -112,7 +111,6 @@ class AgenticResolutionSimulator:
                 )
                 
                 if phased_options:
-                    # Convert phased options to SimulatedOption objects
                     options = []
                     for phased_opt in phased_options:
                         option = SimulatedOption(
@@ -121,7 +119,7 @@ class AgenticResolutionSimulator:
                             estimated_cost=float(phased_opt['estimated_cost']),
                             estimated_time=float(phased_opt.get('time_to_resolution', phased_opt.get('estimated_time', 1.0))),
                             reasoning=phased_opt.get('reasoning', 'Multi-step phased resolution approach'),
-                            source_doc_ids=None  # Phased options from reasoning, not RAG
+                            source_doc_ids=None
                         )
                         options.append(option)
                     
@@ -135,8 +133,6 @@ class AgenticResolutionSimulator:
             
             rag_context = None
             building_id = None
-            
-            # Extract building_id from resident_id (format: RES_BuildingXYZ_1001)
             if resident_id and resident_id.startswith('RES_'):
                 parts = resident_id.split('_')
                 if len(parts) >= 3:
@@ -187,12 +183,9 @@ class AgenticResolutionSimulator:
                 rag_context=rag_context  # Pass RAG context to LLM
             )
             
-            # Check for errors
             if 'error' in llm_response:
                 error_info = llm_response['error']
                 logger.error(f"LLM generation failed: {error_info['type']}")
-                
-                # Return error to be handled by caller - NO FALLBACK TO TEMPLATES
                 raise HTTPException(
                     status_code=503,
                     detail={
@@ -212,8 +205,6 @@ class AgenticResolutionSimulator:
             if is_recurring_from_llm:
                 logger.info(f"Recurring issue detected by LLM")
             
-            # Convert LLM response to SimulatedOption objects
-            # Extract source document IDs from RAG context
             source_doc_ids = []
             if rag_context and rag_context.retrieved_docs:
                 source_doc_ids = [doc['doc_id'] for doc in rag_context.retrieved_docs if 'doc_id' in doc]
@@ -273,6 +264,21 @@ class AgenticResolutionSimulator:
                 options.append(escalation_option)
                 logger.info(f"Added human escalation option due to missing RAG context (total options: {len(options)})")
             
+            if is_recurring:
+                occurrence_count = tools_data.get('recurring', {}).get('occurrence_count', 2)
+                escalation_option = SimulatedOption(
+                    option_id="escalate_to_admin_recurring",
+                    action=f"Escalate to Admin - This issue has occurred {occurrence_count} time(s). We recommend escalating to an administrator to find a permanent fix and prevent future occurrences.",
+                    estimated_cost=0.0,
+                    estimated_time=24.0,
+                    reasoning=f"Recurring issue detected ({occurrence_count} occurrence(s)). Admin review recommended to identify root cause and implement permanent solution.",
+                    source_doc_ids=None,
+                    resident_satisfaction_impact=0.90,
+                    is_permanent_solution=True
+                )
+                options.insert(0, escalation_option)
+                logger.info(f"Added admin escalation option for recurring issue (occurrence_count={occurrence_count}, total options: {len(options)})")
+            
             logger.info(f"Successfully generated {len(options)} agentic options with {len(source_doc_ids)} RAG sources (is_recurring={is_recurring}, rag_fallback={rag_fallback_needed})")
             
             return {
@@ -281,13 +287,10 @@ class AgenticResolutionSimulator:
             }
         
         except HTTPException:
-            # Re-raise HTTP exceptions (these are intended for the API)
             raise
         
         except Exception as e:
             logger.error(f"Unexpected error in agentic option generation: {e}")
-            
-            # Log to CloudWatch
             from app.utils.llm_client import log_error_to_cloudwatch
             log_error_to_cloudwatch(
                 error_type="SIMULATOR_ERROR",
@@ -299,7 +302,6 @@ class AgenticResolutionSimulator:
                 }
             )
             
-            # Return user-friendly error - NO FALLBACK TO TEMPLATES
             raise HTTPException(
                 status_code=503,
                 detail={
@@ -311,7 +313,6 @@ class AgenticResolutionSimulator:
             )
 
 
-# Global instance - AGENTIC simulator
 simulator = AgenticResolutionSimulator()
 
 
@@ -358,13 +359,10 @@ async def simulate_resolutions(
         )
     
     except HTTPException:
-        # Re-raise HTTPExceptions (contain user-friendly error messages)
         raise
     
     except Exception as e:
         logger.error(f"Unexpected error in simulation endpoint: {e}")
-        
-        # Log to CloudWatch
         from app.utils.llm_client import log_error_to_cloudwatch
         log_error_to_cloudwatch(
             error_type="SIMULATION_ENDPOINT_ERROR",
@@ -376,7 +374,6 @@ async def simulate_resolutions(
             }
         )
         
-        # NO FALLBACK - Return user-friendly error
         raise HTTPException(
             status_code=503,
             detail={

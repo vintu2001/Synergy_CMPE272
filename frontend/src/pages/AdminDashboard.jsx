@@ -284,6 +284,24 @@ export default function AdminDashboard() {
                 Escalated
               </button>
             </div>
+
+            {/* Recurring Issues Alert Banner */}
+            {items.filter((r) => r.recurring_issue_non_escalated).length > 0 && (
+              <div className="rounded-lg border-2 border-amber-400 bg-gradient-to-r from-amber-50 to-orange-50 p-4 shadow-lg">
+                <div className="flex items-center gap-3">
+                  <AlertTriangle className="h-5 w-5 flex-shrink-0 text-amber-600" />
+                  <div className="flex-1">
+                    <h4 className="text-sm font-bold text-amber-900">
+                      Recurring Issues Requiring Attention
+                    </h4>
+                    <p className="mt-1 text-xs text-amber-800">
+                      {items.filter((r) => r.recurring_issue_non_escalated).length} user(s) have recurring issues but chose not to escalate. 
+                      Please review these requests and consider reaching out to discuss permanent solutions.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
         {loading ? (
@@ -342,11 +360,19 @@ export default function AdminDashboard() {
                 <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                   {sorted.map((r) => (
                     <React.Fragment key={r.request_id}>
-                      <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/60">
+                      <tr className={`hover:bg-slate-50 dark:hover:bg-slate-800/60 ${r.recurring_issue_non_escalated ? 'bg-amber-50/50 dark:bg-amber-900/20 border-l-4 border-amber-400' : ''}`}>
                         <td className="whitespace-nowrap px-6 py-4 text-xs text-slate-600 dark:text-slate-300">
-                          <code className="rounded bg-slate-100 px-2 py-1 font-mono text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                            {r.request_id}
-                          </code>
+                          <div className="flex items-center gap-2">
+                            <code className="rounded bg-slate-100 px-2 py-1 font-mono text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                              {r.request_id}
+                            </code>
+                            {r.recurring_issue_non_escalated && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-200">
+                                <AlertTriangle className="h-3 w-3" />
+                                Recurring
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-slate-700 dark:text-slate-200">
                           {r.resident_id}
@@ -429,6 +455,25 @@ export default function AdminDashboard() {
                                 <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-200">Resident message</h4>
                                 <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{r.message_text}</p>
                               </div>
+
+                              {/* Recurring Issue Non-Escalated Alert */}
+                              {r.recurring_issue_non_escalated && (
+                                <div className="rounded-lg border-2 border-amber-400 bg-gradient-to-r from-amber-50 to-orange-50 p-4 shadow-lg">
+                                  <div className="flex items-start gap-3">
+                                    <AlertTriangle className="h-5 w-5 flex-shrink-0 text-amber-600" />
+                                    <div className="flex-1">
+                                      <h4 className="mb-2 text-sm font-bold text-amber-900">⚠️ Recurring Issue Alert</h4>
+                                      <p className="mb-2 text-sm text-amber-800">
+                                        This user has been facing this issue <strong>frequently</strong> and chose an option other than escalating to admin.
+                                      </p>
+                                      <p className="text-xs text-amber-700">
+                                        <strong>Action Required:</strong> Please check with the user if they need any help or if there are any concerns. 
+                                        Consider reaching out to discuss a permanent solution for this recurring issue.
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
 
                               {/* User Selection Info */}
                               {r.user_selected_option_id && (

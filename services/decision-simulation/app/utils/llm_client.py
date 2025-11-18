@@ -127,7 +127,6 @@ class LLMClient:
                 resident_history, tools_data, rag_context
             )
             
-            # Use strict JSON mode and lower temperature for more reliable JSON
             response = self.model.generate_content(
                 prompt,
                 generation_config=genai.GenerationConfig(
@@ -182,11 +181,9 @@ class LLMClient:
             
             # Handle both formats: {"options": [...]} and [...]
             if isinstance(result, list):
-                # LLM returned array directly
                 options = result
                 is_recurring = False
             elif isinstance(result, dict) and 'options' in result:
-                # LLM returned object with 'options' key
                 options = result['options']
                 is_recurring = result.get('is_recurring', False)
             else:
@@ -201,7 +198,6 @@ class LLMClient:
             # Validate each option
             for idx, option in enumerate(options):
                 required_fields = ['option_id', 'action', 'estimated_cost', 'resident_satisfaction_impact']
-                # Check for either new field names or old field names for backward compatibility
                 if 'estimated_time' not in option and 'time_to_resolution' not in option:
                     raise ValueError(f"Option {idx+1} missing time field (estimated_time or time_to_resolution)")
                 
@@ -211,7 +207,6 @@ class LLMClient:
                         raise ValueError(f"Option {idx+1} missing required field: {field}")
             
             logger.info(f"Successfully generated {len(options)} options for {resident_id} (is_recurring={is_recurring})")
-            # Return in consistent format with is_recurring flag
             return {'options': options, 'is_recurring': is_recurring}
         
         except json.JSONDecodeError as e:
@@ -586,7 +581,6 @@ Return ONLY the JSON object, no markdown formatting."""
             
             result_text = response.text.strip()
             
-            # Remove markdown code blocks if present
             import re
             result_text = re.sub(r'^```json\s*', '', result_text)
             result_text = re.sub(r'^```\s*', '', result_text)
@@ -631,13 +625,11 @@ Return ONLY the JSON object, no markdown formatting."""
         
         logger.info("🔧 Attempting JSON repair...")
         
-        # Remove any text before first { or [
         match = re.search(r'[\{\[]', text)
         if match:
             text = text[match.start():]
             logger.debug(f"Stripped leading text, now starts with: {text[:50]}")
         
-        # Remove any text after last } or ]
         last_brace = max(text.rfind('}'), text.rfind(']'))
         if last_brace > 0:
             text = text[:last_brace + 1]

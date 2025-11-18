@@ -255,11 +255,9 @@ def generate_decision_reasoning(
                 f"time: {opt.estimated_time:.1f}h)"
             )
     
-    # Check thresholds
     exceeds_cost_threshold = any(analysis.exceeds_scale for analysis in cost_analysis)
     exceeds_time_threshold = any(analysis.exceeds_scale for analysis in time_analysis)
     
-    # Add threshold warnings if applicable
     if exceeds_cost_threshold or exceeds_time_threshold:
         considerations.append("\nThreshold Warnings:")
         if exceeds_cost_threshold:
@@ -442,21 +440,28 @@ async def make_decision(
             for opt in request.simulation.options
         ]
         
-        # RECURRING ISSUE HANDLING: If this is a recurring issue, boost permanent solutions
+        # RECURRING ISSUE HANDLING: If this is a recurring issue, boost permanent solutions and escalation
         if request.simulation.is_recurring:
-            logger.info(f"Recurring issue detected. Boosting permanent solution options.")
+            logger.info(f"Recurring issue detected. Boosting permanent solution and escalation options.")
             adjusted_scored_options = []
             for opt, score in scored_options:
+                # Check if this is the escalation option for recurring issues
+                is_escalation_option = opt.option_id == "escalate_to_admin_recurring"
+                
                 # Check if this option is marked as permanent solution
                 is_permanent = getattr(opt, 'is_permanent_solution', False)
                 
-                if is_permanent:
+                if is_escalation_option:
+                    # Strongly boost escalation option for recurring issues (+25%)
+                    boosted_score = min(score * 1.25, 1.0)
+                    logger.info(f"Option {opt.option_id} ({opt.action}): escalation option, boosting score from {score:.3f} to {boosted_score:.3f}")
+                    adjusted_scored_options.append((opt, boosted_score))
+                elif is_permanent:
                     # Boost permanent solutions by 15% for recurring issues
                     boosted_score = min(score * 1.15, 1.0)
                     logger.info(f"Option {opt.option_id} ({opt.action}): permanent solution, boosting score from {score:.3f} to {boosted_score:.3f}")
                     adjusted_scored_options.append((opt, boosted_score))
                 else:
-                    # Slightly penalize temporary solutions (-5%) for recurring issues
                     adjusted_score = max(score * 0.95, 0.0)
                     logger.info(f"Option {opt.option_id} ({opt.action}): temporary solution, adjusted score from {score:.3f} to {adjusted_score:.3f}")
                     adjusted_scored_options.append((opt, adjusted_score))
@@ -496,7 +501,6 @@ async def make_decision(
         elif score > 0.8:
             response_parts.append("Optimal balance of cost and effectiveness")
         
-        # Add threshold warnings if needed
         warnings = []
         if reasoning.exceeds_budget_threshold:
             warnings.append("Some options exceed budget threshold")
