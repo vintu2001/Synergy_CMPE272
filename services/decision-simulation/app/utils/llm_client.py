@@ -104,7 +104,6 @@ class LLMClient:
         Returns:
             Dict with 'options' list or 'error' dict
         """
-
         if not self.enabled:
             error_msg = "LLM service is not configured (missing GEMINI_API_KEY)"
             log_error_to_cloudwatch(
@@ -122,19 +121,15 @@ class LLMClient:
         
         try:
             # Use simplified prompt to avoid safety blocks
-            prompt = self._build_agentic_prompt(
-                message_text, category, urgency, risk_score, resident_id, 
-                resident_history, tools_data, rag_context
+            prompt = self._build_simple_prompt(
+                message_text, category, urgency, risk_score, rag_context
             )
             
             response = self.model.generate_content(
                 prompt,
                 generation_config=genai.GenerationConfig(
-                    temperature=0.1,  # Very low temperature for consistent JSON formatting
-                    max_output_tokens=4096,
-                    top_p=0.95,  # Reduce randomness
-                    top_k=40,  # Further constrain token selection
-                    response_mime_type="application/json"  # Request JSON response format
+                    temperature=0.6,
+                    max_output_tokens=4096  # Optimized for faster responses
                 )
             )
             
@@ -163,29 +158,15 @@ class LLMClient:
                 response_text = response_text[:-3]  # Remove trailing ```
             response_text = response_text.strip()
             
-            # Try to parse JSON, with automatic repair on failure
-            try:
-                result = json.loads(response_text)
-            except json.JSONDecodeError as json_err:
-                logger.warning(f"Initial JSON parse failed: {json_err}. Attempting repair...")
-                # Try to repair common JSON issues
-                repaired_text = self._repair_json(response_text)
-                try:
-                    result = json.loads(repaired_text)
-                    logger.info("✅ JSON successfully repaired and parsed")
-                except json.JSONDecodeError as repair_err:
-                    logger.error(f"JSON repair failed: {repair_err}")
-                    logger.error(f"Original text: {response_text[:500]}...")
-                    logger.error(f"Repaired text: {repaired_text[:500]}...")
-                    raise repair_err  # Re-raise to trigger error handling below
+            result = json.loads(response_text)
             
             # Handle both formats: {"options": [...]} and [...]
             if isinstance(result, list):
+                # LLM returned array directly
                 options = result
-                is_recurring = False
             elif isinstance(result, dict) and 'options' in result:
+                # LLM returned object with 'options' key
                 options = result['options']
-                is_recurring = result.get('is_recurring', False)
             else:
                 raise ValueError(f"Invalid response structure: expected list or dict with 'options', got {type(result)}")
             
@@ -198,6 +179,7 @@ class LLMClient:
             # Validate each option
             for idx, option in enumerate(options):
                 required_fields = ['option_id', 'action', 'estimated_cost', 'resident_satisfaction_impact']
+                # Check for either new field names or old field names for backward compatibility
                 if 'estimated_time' not in option and 'time_to_resolution' not in option:
                     raise ValueError(f"Option {idx+1} missing time field (estimated_time or time_to_resolution)")
                 
@@ -206,8 +188,9 @@ class LLMClient:
                         logger.error(f"Option {idx+1} missing required field: {field}. Full option: {option}")
                         raise ValueError(f"Option {idx+1} missing required field: {field}")
             
-            logger.info(f"Successfully generated {len(options)} options for {resident_id} (is_recurring={is_recurring})")
-            return {'options': options, 'is_recurring': is_recurring}
+            logger.info(f"Successfully generated {len(options)} options for {resident_id}")
+            # Return in consistent format
+            return {'options': options}
         
         except json.JSONDecodeError as e:
             error_msg = f"Failed to parse LLM response as JSON: {str(e)}"
@@ -284,41 +267,50 @@ class LLMClient:
         # Build RAG context section if available
         rag_section = ""
         if rag_context and hasattr(rag_context, 'retrieved_docs') and rag_context.retrieved_docs:
-            rag_section = "\nKB Docs:\n"
-            for i, doc in enumerate(rag_context.retrieved_docs[:3], 1):
+            rag_section = "\n\nRelevant KB Documents:\n"
+            for i, doc in enumerate(rag_context.retrieved_docs[:3], 1):  # Top 3 docs
                 doc_id = doc.get('doc_id', 'N/A')
-                text_preview = doc.get('text', '')[:150]
+                text_preview = doc.get('text', '')[:200]  # First 200 chars
                 rag_section += f"{i}. [{doc_id}] {text_preview}...\n"
+            rag_section += "\nUse these KB documents to inform your options. Cite doc IDs when relevant.\n"
         
-        prompt = f"""Generate 3 resolution options for apartment maintenance.
+        prompt = f"""You are generating resolution options for an apartment maintenance request.
 
 REQUEST: "{message_text}"
-CATEGORY: {category} | URGENCY: {urgency}
+CATEGORY: {category}
+URGENCY: {urgency}
 {rag_section}
 
-REQUIRED FIELDS (all mandatory):
-- option_id: "opt_1", "opt_2", "opt_3"
-- action: brief description (under 150 chars)
-- estimated_cost: number (dollars)
-- time_to_resolution: number (hours)
-- resident_satisfaction_impact: 0.0-1.0 (faster=higher)
-- reasoning: brief explanation (under 100 chars)
-- steps: array of 3-5 action steps
+INSTRUCTIONS:
+1. Generate exactly 3 resolution options (fast, standard, budget-friendly)
+2. MANDATORY: Include ALL these fields for EACH option:
+   - option_id (string: "opt_1", "opt_2", "opt_3")
+   - action (string: brief description)
+   - estimated_cost (number: dollars)
+   - time_to_resolution (number: hours)
+   - resident_satisfaction_impact (number: 0.0 to 1.0, where 1.0 = very satisfied)
+   - reasoning (string: brief explanation)
+   - steps (array of 3-5 strings: specific implementation steps explaining HOW to resolve the issue, not WHAT will happen)
 
-JSON FORMAT RULES:
-- Return ONLY valid JSON array with no markdown
-- No newlines in strings
-- Keep strings brief
-- Escape special characters
+3. For resident_satisfaction_impact, consider:
+   - Faster resolution = higher satisfaction (e.g., 2h = 0.9, 24h = 0.7, 48h = 0.6)
+   - Lower cost = higher satisfaction
+   - Less inconvenience = higher satisfaction
 
-Example:
+4. For steps, provide 3-5 brief bullet points of what will happen (e.g., ["Identify faulty HVAC component through diagnostic", "Source replacement part from inventory", "Install new component and recalibrate system", "Test cooling output for 30 minutes"])
+
+RETURN ONLY THIS JSON (no markdown, no ```):
 [
-  {{"option_id":"opt_1","action":"Fast repair","estimated_cost":300,"time_to_resolution":2,"resident_satisfaction_impact":0.85,"reasoning":"Quick fix","steps":["Step 1","Step 2","Step 3"]}},
-  {{"option_id":"opt_2","action":"Standard repair","estimated_cost":150,"time_to_resolution":24,"resident_satisfaction_impact":0.75,"reasoning":"Balanced","steps":["Step 1","Step 2","Step 3"]}},
-  {{"option_id":"opt_3","action":"Budget repair","estimated_cost":50,"time_to_resolution":48,"resident_satisfaction_impact":0.65,"reasoning":"Economical","steps":["Step 1","Step 2","Step 3"]}}
+  {{"option_id":"opt_1","action":"...","estimated_cost":300,"time_to_resolution":2,"resident_satisfaction_impact":0.85,"reasoning":"...","steps":["Step 1","Step 2","Step 3"]}},
+  {{"option_id":"opt_2","action":"...","estimated_cost":150,"time_to_resolution":24,"resident_satisfaction_impact":0.75,"reasoning":"...","steps":["Step 1","Step 2","Step 3"]}},
+  {{"option_id":"opt_3","action":"...","estimated_cost":50,"time_to_resolution":48,"resident_satisfaction_impact":0.65,"reasoning":"...","steps":["Step 1","Step 2","Step 3"]}}
 ]
 
-Generate valid JSON array now."""
+5. For steps, focus on IMPLEMENTATION (HOW), not events (WHAT):
+   - BAD: "Technician will arrive", "Issue will be fixed"
+   - GOOD: "Run diagnostic scan on AC unit", "Replace refrigerant if low", "Clean air filters"
+
+"""
         
         return prompt
     
@@ -338,11 +330,13 @@ Generate valid JSON array now."""
         # Build history context
         history_context = ""
         if resident_history and len(resident_history) > 0:
-            history_context = f"This resident has submitted {len(resident_history)} request(s) in the past month:\n"
-            for i, req in enumerate(resident_history[-5:], 1):  # Show last 5
-                history_context += f"{i}. [{req.get('category', 'Unknown')}] \"{req.get('message_text', '')[:60]}...\" "
-                history_context += f"(Status: {req.get('status', 'Unknown')}, Created: {req.get('created_at', 'N/A')[:10]})\n"
-            history_context += "\nIMPORTANT: Consider if this is a recurring issue that needs a permanent solution."
+            recent_issues = []
+            for req in resident_history[-5:]:
+                recent_issues.append(
+                    f"  - {req.get('category', 'Unknown')}: \"{req.get('message_text', '')[:50]}...\" "
+                    f"(Status: {req.get('status', 'Unknown')})"
+                )
+            history_context = "\n".join(recent_issues)
         
         # Build tools context
         tools_context = ""
@@ -373,67 +367,87 @@ Generate valid JSON array now."""
                 rag_section += f"   {text[:300]}...\n\n"
             rag_section += "IMPORTANT: Use these KB documents to inform your decisions. Reference doc IDs in your reasoning when applicable.\n"
         
-        prompt = f"""You are an AI apartment management agent. Generate 3 resolution options for this issue.
+        prompt = f"""You are an expert AI apartment management agent with advanced reasoning capabilities.
 
-ISSUE: {message_text}
-CATEGORY: {category} | URGENCY: {urgency} | RISK: {risk_score:.2f}/1.0
-RESIDENT: {resident_id}
+MISSION: Generate 3 distinct, context-specific resolution options for this resident's issue.
 
-HISTORY:
-{history_context if history_context else "No previous issues."}
+=== CURRENT ISSUE ===
+Resident ID: {resident_id}
+Issue Description: {message_text}
+Category: {category}
+Urgency Level: {urgency}
+Risk Score: {risk_score:.2f}/1.0 (0=low risk, 1=high risk)
+
+=== RESIDENT HISTORY ===
+{history_context if history_context else "No previous issues on record."}
 {tools_context}
 {rag_section}
 
-TASK:
-1. Check if recurring: Set is_recurring=true if resident has 2+ similar past issues OR message contains "again/still/keep happening"
-2. Generate 3 options: Premium (fast/costly), Balanced (moderate), Budget (slow/cheap)
-3. If is_recurring=true, include 1+ permanent solution option (is_permanent_solution=true)
+=== INSTRUCTIONS ===
+As an intelligent agent, you must:
 
-REQUIREMENTS:
-- Be specific to "{message_text}" not generic
-- Costs realistic for apartment maintenance
-- Times in hours (decimals OK)
-- Satisfaction 0.0-1.0
-- Keep all text brief and on single lines
+1. ANALYZE the issue deeply:
+   - What is the root cause?
+   - What are the immediate vs long-term needs?
+   - Consider urgency, risk, and resident history
+   - Think about cost-effectiveness vs resident satisfaction
 
-JSON FORMAT (CRITICAL):
-- Return ONLY valid JSON with no markdown or code blocks
-- Keep action and reasoning under 150 characters each
-- No newlines in strings - use spaces
-- No unescaped quotes or special chars
-- Ensure all brackets/braces closed
+2. REASON about the best approaches:
+   - What are the tradeoffs (cost/time/quality)?
+   - Should we prioritize speed or cost?
+   - Is this a recurring issue that needs a permanent solution?
+   - Can the resident handle any part of this themselves?
 
+3. GENERATE 3 distinct options with clear differentiation:
+   - Option 1: Premium/Fast (higher cost, faster resolution, higher satisfaction)
+   - Option 2: Balanced (moderate cost, reasonable time, good satisfaction)
+   - Option 3: Budget/DIY (lower cost, longer time OR self-service element)
+
+4. BE SPECIFIC AND ACTIONABLE:
+   - Don't use generic templates
+   - Tailor actions to the exact issue described
+   - Provide realistic cost and time estimates
+   - Explain WHY each option makes sense
+
+=== CRITICAL REQUIREMENTS ===
+- Make options SPECIFIC to "{message_text}" (not generic)
+- Consider the {urgency} urgency and {risk_score:.2f} risk score
+- If history shows recurring issues, suggest permanent solutions
+- All costs must be realistic for apartment maintenance
+- All times must be in hours (decimals allowed)
+- Satisfaction scores must be 0.0-1.0
+
+=== OUTPUT FORMAT (JSON) ===
 {{
-  "reasoning": "Brief analysis on one line",
-  "is_recurring": false,
+  "reasoning": "Your step-by-step analysis of the issue and why you chose these options",
   "options": [
     {{
       "option_id": "opt_1",
-      "action": "Specific action 1-2 sentences",
+      "action": "Detailed, specific action description (3-5 sentences)",
       "estimated_cost": 250.00,
       "time_to_resolution": 4.0,
       "resident_satisfaction_impact": 0.85,
-      "reasoning": "Why this option works",
+      "reasoning": "Why this option is good for this specific situation",
       "is_permanent_solution": false,
       "requires_resident_action": false
     }},
     {{
       "option_id": "opt_2",
-      "action": "Different approach 1-2 sentences",
+      "action": "Different approach with different tradeoffs",
       "estimated_cost": 150.00,
       "time_to_resolution": 8.0,
       "resident_satisfaction_impact": 0.75,
-      "reasoning": "Why this option works",
+      "reasoning": "Why this balanced option makes sense",
       "is_permanent_solution": false,
       "requires_resident_action": false
     }},
     {{
       "option_id": "opt_3",
-      "action": "Budget option 1-2 sentences",
+      "action": "Budget-friendly or DIY-assisted option",
       "estimated_cost": 80.00,
       "time_to_resolution": 12.0,
       "resident_satisfaction_impact": 0.65,
-      "reasoning": "Why this option works",
+      "reasoning": "Why this economical option is viable",
       "is_permanent_solution": false,
       "requires_resident_action": true
     }}
@@ -442,9 +456,14 @@ JSON FORMAT (CRITICAL):
   "escalation_reason": null
 }}
 
-Set escalation_recommended=true only for: life-threatening, beyond maintenance skills, legal issues, or resident conflicts.
+=== ESCALATION LOGIC ===
+Set "escalation_recommended": true if:
+- Issue is life-threatening or emergency safety concern
+- Problem requires skills beyond standard maintenance
+- Legal or regulatory compliance issue
+- Conflict between residents
 
-Generate concise, valid JSON now."""
+Think carefully and be creative. Generate options now."""
 
         return prompt
     
@@ -581,11 +600,11 @@ Return ONLY the JSON object, no markdown formatting."""
             
             result_text = response.text.strip()
             
+            # Remove markdown code blocks if present
             import re
             result_text = re.sub(r'^```json\s*', '', result_text)
             result_text = re.sub(r'^```\s*', '', result_text)
             result_text = re.sub(r'\s*```$', '', result_text)
-            
             
             result = json.loads(result_text)
             
@@ -603,76 +622,8 @@ Return ONLY the JSON object, no markdown formatting."""
                 'confidence': 0.0,
                 'error': str(e)
             }
-    
-    def _repair_json(self, text: str) -> str:
-        """
-        Attempt to repair common JSON formatting errors from LLM responses.
-        
-        Common issues:
-        - Unterminated strings
-        - Missing closing quotes
-        - Missing closing brackets/braces
-        - Trailing commas
-        - Unescaped quotes in strings
-        
-        Args:
-            text: Potentially malformed JSON string
-        
-        Returns:
-            Repaired JSON string
-        """
-        import re
-        
-        logger.info("🔧 Attempting JSON repair...")
-        
-        match = re.search(r'[\{\[]', text)
-        if match:
-            text = text[match.start():]
-            logger.debug(f"Stripped leading text, now starts with: {text[:50]}")
-        
-        last_brace = max(text.rfind('}'), text.rfind(']'))
-        if last_brace > 0:
-            text = text[:last_brace + 1]
-            logger.debug(f"Stripped trailing text, now ends with: {text[-50:]}")
-        
-        # Fix unterminated strings by adding closing quote at end of line
-        lines = text.split('\n')
-        fixed_lines = []
-        for i, line in enumerate(lines):
-            # Count quotes (excluding escaped quotes)
-            quote_count = len(re.findall(r'(?<!\\)"', line))
-            # If odd number of quotes, likely unterminated string
-            if quote_count % 2 != 0 and not line.strip().endswith('"'):
-                # Add closing quote before any trailing comma or brace
-                line = re.sub(r'([^"\\])(\s*[,\}\]]?\s*)$', r'\1"\2', line)
-                logger.debug(f"Fixed unterminated string on line {i+1}")
-            fixed_lines.append(line)
-        text = '\n'.join(fixed_lines)
-        
-        # Fix trailing commas before closing brackets
-        original_text = text
-        text = re.sub(r',(\s*[\}\]])', r'\1', text)
-        if text != original_text:
-            logger.debug("Removed trailing commas")
-        
-        # Ensure proper closing brackets
-        open_braces = text.count('{') - text.count('}')
-        open_brackets = text.count('[') - text.count(']')
-        
-        # Add missing closing characters
-        if open_braces > 0:
-            text += '}' * open_braces
-            logger.debug(f"Added {open_braces} closing braces")
-        if open_brackets > 0:
-            text += ']' * open_brackets
-            logger.debug(f"Added {open_brackets} closing brackets")
-        
-        logger.info(f"✅ JSON repair complete. Length: {len(text)} chars")
-        
-        return text
 
 
 # Global instance
 llm_client = LLMClient()
-
 

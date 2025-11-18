@@ -154,7 +154,6 @@ async def submit_request(request: MessageRequest):
         
         # Risk Prediction
         risk_score = None
-        recurrence_prob = None
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 risk_response = await client.post(
@@ -170,9 +169,7 @@ async def submit_request(request: MessageRequest):
                 risk_response.raise_for_status()
                 risk_data = risk_response.json()
                 risk_score = risk_data.get("risk_forecast")
-                recurrence_prob = risk_data.get("recurrence_probability")
-                rec_str = f"{recurrence_prob:.4f}" if recurrence_prob is not None else "N/A"
-                logger.info(f"Risk prediction successful: risk={risk_score:.4f}, recurrence={rec_str}")
+                logger.info(f"Risk prediction successful: {risk_score:.4f}")
         except Exception as risk_error:
             logger.warning(f"Risk prediction failed (non-critical): {risk_error}")
         
@@ -181,7 +178,6 @@ async def submit_request(request: MessageRequest):
         simulated_options = None
         llm_generation_failed = False
         llm_error_message = None
-        is_recurring = False  # Default to False
         
         try:
             # Get resident history for context
@@ -212,9 +208,6 @@ async def submit_request(request: MessageRequest):
                 )
                 simulate_response.raise_for_status()
                 simulation_data = simulate_response.json()
-                
-                # Extract is_recurring flag from simulation response
-                is_recurring = simulation_data.get("is_recurring", False)
                 
                 simulated_options = [
                     {
@@ -296,7 +289,6 @@ async def submit_request(request: MessageRequest):
                 },
                 "risk_assessment": {
                     "risk_forecast": risk_score,
-                    "recurrence_probability": recurrence_prob,
                     "risk_level": "High" if risk_score and risk_score > 0.7 else "Medium" if risk_score and risk_score > 0.3 else "Low" if risk_score else "Unknown"
                 } if risk_score is not None else None,
                 "action_required": "Please escalate this request to a human administrator using the 'Escalate to Human' option."
@@ -323,20 +315,6 @@ async def submit_request(request: MessageRequest):
         if not success:
             raise HTTPException(status_code=500, detail="Failed to save request to database")
         
-        # Store is_recurring_issue flag in the request
-        if is_recurring:
-            try:
-                table = get_table()
-                table.update_item(
-                    Key={'request_id': request_id},
-                    UpdateExpression='SET is_recurring_issue = :recurring',
-                    ExpressionAttributeValues={
-                        ':recurring': True
-                    }
-                )
-            except Exception as e:
-                logger.warning(f"Failed to update is_recurring_issue flag: {e}")
-        
         if sqs and SQS_URL:
             try:
                 payload = {
@@ -356,8 +334,6 @@ async def submit_request(request: MessageRequest):
         
         # Get AI recommendation
         recommended_option_id = None
-        decision_data = None
-
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 decision_response = await client.post(
@@ -379,9 +355,8 @@ async def submit_request(request: MessageRequest):
                 )
                 decision_response.raise_for_status()
                 decision_data = decision_response.json()
-                # Use recommended_option_id if provided, otherwise fall back to chosen_option_id
-                recommended_option_id = decision_data.get("recommended_option_id") or decision_data.get("chosen_option_id")
-                logger.info(f"AI recommended option: {recommended_option_id} (recurring: {is_recurring})")
+                recommended_option_id = decision_data.get("chosen_option_id")
+                logger.info(f"AI recommended option: {recommended_option_id}")
         except Exception as decision_error:
             logger.warning(f"Decision recommendation failed (non-critical): {decision_error}")
         
@@ -402,7 +377,6 @@ async def submit_request(request: MessageRequest):
         processing_time = (time.time() - start_time) * 1000
         logger.info(f"Request {request_id} processed in {processing_time:.2f}ms")
         
-
         # Log request completion summary
         log_to_cloudwatch('request_completed', {
             'request_id': request_id,
@@ -417,7 +391,7 @@ async def submit_request(request: MessageRequest):
             'status': 'success'
         })
         
-        response = {
+        return {
             "status": "submitted",
             "message": "Request submitted successfully!",
             "request_id": request_id,
@@ -429,23 +403,14 @@ async def submit_request(request: MessageRequest):
             },
             "risk_assessment": {
                 "risk_forecast": risk_score,
-                "recurrence_probability": recurrence_prob,
                 "risk_level": "High" if risk_score and risk_score > 0.7 else "Medium" if risk_score and risk_score > 0.3 else "Low" if risk_score else "Unknown"
             } if risk_score is not None else None,
             "simulation": {
                 "options_generated": len(simulated_options),
                 "options": simulated_options,
-                "recommended_option_id": recommended_option_id,
-                "is_recurring": is_recurring,
-                "occurrence_count": simulation_data.get("occurrence_count")
+                "recommended_option_id": recommended_option_id
             }
         }
-        
-        # Add decision data if available
-        if decision_data:
-            response["decision"] = decision_data
-        
-        return response
     except HTTPException:
         raise
     except Exception as e:
@@ -469,13 +434,10 @@ async def select_option(selection: SelectOptionRequest):
         
         # Special handling for human escalation
         if selection.selected_option_id == "escalate_to_human":
-            # Check if this is a recurring issue
-            is_recurring_issue = request.get('is_recurring_issue', False)
-            escalation_type = "recurring_issue" if is_recurring_issue else "manual"
             log_to_cloudwatch('request_escalated', {
                 'request_id': selection.request_id,
-                'escalation_type': escalation_type,
-                'reason': 'User selected escalation option' if escalation_type == "manual" else 'Recurring issue - user selected admin escalation'
+                'escalation_type': 'manual',
+                'reason': 'User selected escalation option'
             })
             
             table = get_table()
@@ -484,24 +446,22 @@ async def select_option(selection: SelectOptionRequest):
                 UpdateExpression='SET user_selected_option_id = :sel_opt, #status = :status, updated_at = :updated',
                 ExpressionAttributeNames={'#status': 'status'},
                 ExpressionAttributeValues={
-                    ':sel_opt': selection.selected_option_id,
+                    ':sel_opt': "escalate_to_human",
                     ':status': Status.ESCALATED.value,
                     ':updated': datetime.now(timezone.utc).isoformat()
                 }
             )
             
-            message = "Your request has been escalated to an administrator. They will review this recurring issue and work on a permanent solution. You'll receive a response within 24 hours." if escalation_type == "recurring_issue" else "Your request has been escalated to a human staff member. You'll receive a response within 24 hours."
-            
             return {
                 "status": "escalated",
-                "message": message,
+                "message": "Your request has been escalated to a human staff member. You'll receive a response within 24 hours.",
                 "request_id": selection.request_id,
                 "selected_option": {
-                    "option_id": selection.selected_option_id,
-                    "action": "Escalate to Admin" if escalation_type == "recurring_issue" else "Escalate to Human Support",
+                    "option_id": "escalate_to_human",
+                    "action": "Escalate to Human Support",
                     "estimated_cost": 0,
                     "estimated_time": 24.0,
-                    "reasoning": "Recurring issue - admin escalation for permanent fix" if escalation_type == "recurring_issue" else "Manual escalation requested by resident"
+                    "reasoning": "Manual escalation requested by resident"
                 }
             }
         
@@ -518,57 +478,25 @@ async def select_option(selection: SelectOptionRequest):
         if not selected_option:
             raise HTTPException(status_code=400, detail="Invalid option ID")
         
-        # Check if this is a recurring issue and user chose non-escalation option
-        # We need to check if the request was marked as recurring
-        # Check if this is a recurring issue
-        is_recurring_issue = request.get('is_recurring_issue', False) or is_recurring
-        recurring_issue_non_escalated = False
-        
-        # If it's a recurring issue and user chose a non-escalation option
-        if is_recurring_issue and selection.selected_option_id != "escalate_to_human":
-            is_recurring_issue = True
-            recurring_issue_non_escalated = True
-            logger.warning(
-                f"Recurring issue detected: User {request.get('resident_id')} chose option {selection.selected_option_id} "
-                f"instead of escalating to admin for recurring issue {selection.request_id}"
-            )
-            log_to_cloudwatch('recurring_issue_non_escalated', {
-                'request_id': selection.request_id,
-                'resident_id': request.get('resident_id'),
-                'selected_option_id': selection.selected_option_id,
-                'selected_option_action': selected_option.get('action', 'Unknown')[:100],
-                'message': 'User chose non-escalation option for recurring issue - admin should check with user'
-            })
-        
         log_to_cloudwatch('option_selected', {
             'request_id': selection.request_id,
             'selected_option_id': selection.selected_option_id,
             'option_action': selected_option.get('action', 'Unknown')[:100],
             'estimated_cost': selected_option.get('estimated_cost'),
-            'estimated_time': selected_option.get('estimated_time'),
-            'is_recurring_issue': is_recurring_issue,
-            'recurring_issue_non_escalated': recurring_issue_non_escalated
+            'estimated_time': selected_option.get('estimated_time')
         })
         
         # Update request with user's selection
         table = get_table()
-        update_expression = 'SET user_selected_option_id = :sel_opt, #status = :status, updated_at = :updated'
-        expression_values = {
-            ':sel_opt': selection.selected_option_id,
-            ':status': Status.IN_PROGRESS.value,
-            ':updated': datetime.now(timezone.utc).isoformat()
-        }
-        
-        # Add recurring_issue_non_escalated flag if applicable
-        if recurring_issue_non_escalated:
-            update_expression += ', recurring_issue_non_escalated = :recurring_flag'
-            expression_values[':recurring_flag'] = True
-        
         table.update_item(
             Key={'request_id': selection.request_id},
-            UpdateExpression=update_expression,
+            UpdateExpression='SET user_selected_option_id = :sel_opt, #status = :status, updated_at = :updated',
             ExpressionAttributeNames={'#status': 'status'},
-            ExpressionAttributeValues=expression_values
+            ExpressionAttributeValues={
+                ':sel_opt': selection.selected_option_id,
+                ':status': Status.IN_PROGRESS.value,
+                ':updated': datetime.now(timezone.utc).isoformat()
+            }
         )
         
         # Execute the selected option (Execution Service)

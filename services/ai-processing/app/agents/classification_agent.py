@@ -180,6 +180,7 @@ Return ONLY the JSON object."""
         intent_text = intent_response.text.strip()
         logger.info(f"[GEMINI] Stage 1 raw response: {intent_text}")
         
+        # Remove markdown code blocks if present
         intent_text = re.sub(r'^```json\s*', '', intent_text)
         intent_text = re.sub(r'^```\s*', '', intent_text)
         intent_text = re.sub(r'\s*```$', '', intent_text)
@@ -230,6 +231,7 @@ Return ONLY the JSON object."""
         category_text = category_response.text.strip()
         logger.info(f"[GEMINI] Stage 2 raw response: {category_text}")
         
+        # Remove markdown code blocks if present
         category_text = re.sub(r'^```json\s*', '', category_text)
         category_text = re.sub(r'^```\s*', '', category_text)
         category_text = re.sub(r'\s*```$', '', category_text)
@@ -251,6 +253,7 @@ Return ONLY the JSON object."""
         category = category_map.get(category_key, IssueCategory.MAINTENANCE)
         category_confidence = float(category_result.get('confidence', 0.8))
         
+        # For questions, return with proper category but Low urgency
         if intent == Intent.ANSWER_QUESTION:
             logger.info(f"[GEMINI] Intent is answer_question with category={category.value}")
             return ClassificationResponse(
@@ -305,6 +308,7 @@ Return ONLY the JSON object. DO NOT use categories outside the 5 allowed ones.""
         result_text = urgency_response.text.strip()
         logger.info(f"[GEMINI] Stage 3 raw response: {result_text[:100]}...")
         
+        # Remove markdown code blocks if present
         result_text = re.sub(r'^```json\s*', '', result_text)
         result_text = re.sub(r'^```\s*', '', result_text)
         result_text = re.sub(r'\s*```$', '', result_text)

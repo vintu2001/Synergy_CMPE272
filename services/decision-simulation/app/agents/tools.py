@@ -45,16 +45,25 @@ class AgentTools:
         tools_data = {}
         
         try:
+            # Always check availability and pricing
             tools_data['availability'] = self.check_technician_availability(category, urgency)
             tools_data['pricing'] = self.estimate_repair_cost(category, urgency, message_text)
+            
+            # Check past solutions for this resident
             tools_data['past_solutions'] = await self.query_past_solutions(resident_id, category)
+            
+            # Check for recurring issues
             tools_data['recurring'] = await self.check_recurring_issues(resident_id, category, message_text)
             
+            # For maintenance, check inventory and weather
             if category == IssueCategory.MAINTENANCE:
                 tools_data['inventory'] = self.check_inventory(message_text)
                 tools_data['weather'] = self.get_weather_conditions()
             
+            # Get time-of-day factors for scheduling
             tools_data['time_factors'] = self.get_time_of_day_factors()
+            
+            # Calculate optimal schedule
             tools_data['optimal_schedule'] = self.calculate_optimal_schedule(
                 category, urgency, tools_data['availability']
             )
@@ -84,11 +93,13 @@ class AgentTools:
         elif 18 <= hour < 22:
             base_available = random.randint(1, 3)
         else:
-            base_available = random.randint(0, 1)
+            base_available = random.randint(0, 1)  # Limited overnight
         
+        # High urgency increases availability (emergency staff)
         if urgency == "High":
             base_available += 1
         
+        # Category-specific availability
         category_multipliers = {
             IssueCategory.MAINTENANCE: 1.0,
             IssueCategory.SECURITY: 1.2,
@@ -98,6 +109,8 @@ class AgentTools:
         }
         
         available_count = int(base_available * category_multipliers.get(category, 1.0))
+        
+        # Estimate wait time
         if available_count >= 3:
             wait_time = random.uniform(0.5, 1.5)
             status = "Excellent"
@@ -361,14 +374,11 @@ class AgentTools:
                 response.raise_for_status()
                 past_requests = response.json()
             
+            # Filter by category and last 6 months
             six_months_ago = datetime.now(timezone.utc) - timedelta(days=180)
             recent_same_category = []
             
             for req in past_requests:
-                req_intent = req.get('intent', '')
-                if req_intent == 'answer_a_question' or req_intent == 'ANSWER_QUESTION':
-                    continue
-                
                 if req.get('category') == category.value:
                     created_at_str = req.get('created_at')
                     if created_at_str:
@@ -383,40 +393,24 @@ class AgentTools:
                         except (ValueError, TypeError):
                             continue
             
+            # Simple keyword matching for similar issues
             message_lower = message_text.lower()
-            important_short_words = {'ac', 'hvac', 'heat', 'cold', 'leak', 'hot', 'door', 'lock', 'key', 'wifi', 'gas', 'pipe'}
-            words = message_lower.split()
-            keywords = [
-                word for word in words 
-                if len(word) > 4 or word in important_short_words
-            ]
-            
-            recurring_keywords = {'again', 'still', 'keep', 'keeps', 'repeatedly', 'continue', 'continues', 'ongoing'}
-            message_indicates_recurring = any(kw in message_lower for kw in recurring_keywords)
+            keywords = [word for word in message_lower.split() if len(word) > 4]
             
             similar_count = 0
             for req in recent_same_category:
                 req_text = req.get('message_text', '').lower()
                 matches = sum(1 for kw in keywords if kw in req_text)
-                if matches >= 2 or (matches >= 1 and len(keywords) <= 3):
+                if matches >= 2:
                     similar_count += 1
             
-            is_recurring = similar_count >= 2 or (message_indicates_recurring and similar_count >= 1)
-            
-            logger.info(
-                f"Recurring check for {resident_id}: "
-                f"keywords={keywords}, similar_count={similar_count}, "
-                f"message_indicates_recurring={message_indicates_recurring}, "
-                f"category_count={len(recent_same_category)}, is_recurring={is_recurring}"
-            )
+            is_recurring = similar_count >= 2
             
             return {
                 'is_recurring': is_recurring,
                 'occurrence_count': similar_count + 1,
                 'category_count': len(recent_same_category),
                 'time_window': '6 months',
-                'keywords_matched': keywords,
-                'message_has_recurring_keywords': message_indicates_recurring,
                 'recommendation': 'Permanent solution needed' if is_recurring else 'Standard resolution'
             }
         

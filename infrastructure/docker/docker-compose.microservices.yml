@@ -8,8 +8,6 @@ services:
     container_name: request-management-service
     ports:
       - "8001:8001"
-    env_file:
-      - ../../services/request-management/.env
     environment:
       - PORT=8001
       - AWS_REGION=${AWS_REGION:-us-west-2}
@@ -23,6 +21,7 @@ services:
       - AI_PROCESSING_SERVICE_URL=http://ai-processing:8002
       - DECISION_SIMULATION_SERVICE_URL=http://decision-simulation:8003
       - EXECUTION_SERVICE_URL=http://execution:8004
+      - ADMIN_API_KEY=${ADMIN_API_KEY:-test-admin-key}
     depends_on:
       - ai-processing
       - decision-simulation
@@ -42,8 +41,6 @@ services:
     container_name: ai-processing-service
     ports:
       - "8002:8002"
-    env_file:
-      - ../../services/ai-processing/.env
     environment:
       - PORT=8002
       - GEMINI_API_KEY=${GEMINI_API_KEY}
@@ -68,18 +65,15 @@ services:
     container_name: decision-simulation-service
     ports:
       - "8003:8003"
-    env_file:
-      - ../../services/decision-simulation/.env
     environment:
       - PORT=8003
       - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash}
       - RAG_ENABLED=true
       - VECTOR_STORE_PATH=/app/vector_stores/chroma_db
       - VECTOR_STORE_COLLECTION=apartment_kb
       - EMBEDDING_MODEL=all-MiniLM-L6-v2
       - RAG_TOP_K=5
-      - RAG_SIMILARITY_THRESHOLD=0.5
+      - RAG_SIMILARITY_THRESHOLD=0.7
       - AWS_REGION=${AWS_REGION:-us-west-2}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
@@ -106,8 +100,6 @@ services:
     container_name: execution-service
     ports:
       - "8004:8004"
-    env_file:
-      - ../../services/execution/.env
     environment:
       - PORT=8004
       - AWS_REGION=${AWS_REGION:-us-west-2}

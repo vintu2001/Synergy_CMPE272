@@ -2,7 +2,6 @@
 Decision & Simulation API routes
 Handles resolution option simulation, decision making, and question answering.
 """
-import logging
 from fastapi import APIRouter, HTTPException, Body
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
@@ -16,7 +15,6 @@ from app.rag.retriever import answer_question
 from app.utils.cloudwatch_logger import log_to_cloudwatch
 
 router = APIRouter()
-logger = logging.getLogger(__name__)
 
 
 class AnswerQuestionRequest(BaseModel):
@@ -35,7 +33,7 @@ async def simulate_endpoint(request: SimulationRequest) -> SimulationResponse:
         category = IssueCategory(request.category)
         urgency = Urgency(request.urgency)
         
-        result = await simulator.generate_options(
+        options = await simulator.generate_options(
             category=category,
             urgency=urgency,
             message_text=request.message_text,
@@ -43,9 +41,6 @@ async def simulate_endpoint(request: SimulationRequest) -> SimulationResponse:
             risk_score=request.risk_score,
             resident_history=request.resident_history
         )
-        
-        options = result.get('options', [])
-        is_recurring = result.get('is_recurring', False)
         
         issue_id = f"agentic_{category.value}_{urgency.value}_{request.resident_id}"
         
@@ -58,13 +53,11 @@ async def simulate_endpoint(request: SimulationRequest) -> SimulationResponse:
             'option_actions': [opt.action[:50] if hasattr(opt, 'action') else str(opt)[:50] for opt in options[:3]],
             'issue_id': issue_id
         })
-
+        
         return SimulationResponse(
             options=options,
-            issue_id=issue_id,
-            is_recurring=is_recurring
+            issue_id=issue_id
         )
-        
     except Exception as e:
         log_to_cloudwatch('simulation_error', {
             'resident_id': request.resident_id,
@@ -81,29 +74,21 @@ async def decide_endpoint(request: DecisionRequest) -> DecisionResponse:
     """
     try:
         result = await make_decision(request=request)
-        logger.info(f"✓ Decision result received: {result.decision.chosen_option_id if result and result.decision else 'None'}")
         
-        try:
-            log_to_cloudwatch('decision_made', {
-                'chosen_option_id': result.decision.chosen_option_id,
-                'chosen_action': result.decision.chosen_action[:100],
-                'estimated_cost': result.decision.estimated_cost,
-                'estimated_time': result.decision.estimated_time,
-                'alternatives_considered': len(result.decision.alternatives_considered) if result.decision.alternatives_considered else 0,
-                'reasoning_preview': result.decision.reasoning[:150] if result.decision.reasoning else None
-            })
-        except Exception as cw_error:
-            logger.warning(f"CloudWatch logging failed (non-critical): {cw_error}")
+        log_to_cloudwatch('decision_made', {
+            'chosen_option_id': result.decision.chosen_option_id,
+            'chosen_action': result.decision.chosen_action[:100],
+            'estimated_cost': result.decision.estimated_cost,
+            'estimated_time': result.decision.estimated_time,
+            'alternatives_considered': len(result.decision.alternatives_considered) if result.decision.alternatives_considered else 0,
+            'reasoning_preview': result.decision.reasoning[:150] if result.decision.reasoning else None
+        })
         
         return result.decision
     except Exception as e:
-        logger.error(f"❌ Decision endpoint failed: {str(e)}", exc_info=True)
-        try:
-            log_to_cloudwatch('decision_error', {
-                'error': str(e)
-            })
-        except:
-            pass
+        log_to_cloudwatch('decision_error', {
+            'error': str(e)
+        })
         raise HTTPException(status_code=500, detail=f"Decision failed: {str(e)}")
 
 

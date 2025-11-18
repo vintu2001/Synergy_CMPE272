@@ -192,29 +192,6 @@ Synergy_CMPE272/
 - Python 3.10+ (for local development, optional)
 - Google Gemini API key (for AI features)
 
-2. **Run Microservices Locally**
-   ```bash
-   # Request Management
-   cd services/request-management
-   docker build -t request-management .
-   docker run -p 8001:8001 request-management
-   
-   # AI Processing
-   cd services/ai-processing
-   docker build -t ai-processing .
-   docker run -p 8002:8002 ai-processing
-   
-   # Decision & Simulation (needs ChromaDB)
-   cd services/decision-simulation
-   docker build -t decision-simulation .
-   docker run -p 8003:8003 -v $(pwd)/vector_stores:/app/vector_stores decision-simulation
-   
-   # Execution
-   cd services/execution
-   docker build -t execution .
-   docker run -p 8004:8004 execution
-   ```
-
 ---
 
 ## 🧪 Local Testing (End-to-End from UI)
@@ -402,7 +379,6 @@ docker-compose -f docker-compose.microservices.yml down -v
 - Verify ChromaDB has documents (Step 5)
 - Check RAG_ENABLED=true in Decision & Simulation service
 - Check logs: `docker-compose logs decision-simulation | grep -i rag`
-
 
 ---
 

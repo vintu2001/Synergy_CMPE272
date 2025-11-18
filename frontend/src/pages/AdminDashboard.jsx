@@ -338,7 +338,6 @@ export default function AdminDashboard() {
                 Escalated
               </button>
             </div>
-
           </div>
 
         {loading ? (
@@ -397,29 +396,11 @@ export default function AdminDashboard() {
                 <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                   {paginatedItems.map((r) => (
                     <React.Fragment key={r.request_id}>
-                      <tr className={`hover:bg-slate-50 dark:hover:bg-slate-800/60 ${r.recurring_issue_non_escalated ? 'bg-amber-50/50 dark:bg-amber-900/20 border-l-4 border-amber-400' : ''}`}>
+                      <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/60">
                         <td className="whitespace-nowrap px-6 py-4 text-xs text-slate-600 dark:text-slate-300">
-                          <div className="flex flex-col gap-1.5">
-                            <code className="rounded bg-slate-100 px-2 py-1 font-mono text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                              {r.request_id}
-                            </code>
-                            {(r.recurring_issue_non_escalated || (r.recurring_issue_non_escalated && r.user_selected_option_id && r.recommended_option_id && r.user_selected_option_id !== r.recommended_option_id)) && (
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                {r.recurring_issue_non_escalated && (
-                                  <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 border border-amber-200 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/30 dark:border-amber-700/50 dark:text-amber-300" title="Recurring issue - User chose option other than escalation">
-                                    <AlertTriangle className="h-2.5 w-2.5" />
-                                    Recurring
-                                  </span>
-                                )}
-                                {r.recurring_issue_non_escalated && r.user_selected_option_id && r.recommended_option_id && r.user_selected_option_id !== r.recommended_option_id && (
-                                  <span className="inline-flex items-center gap-1 rounded-md bg-orange-50 border border-orange-200 px-2 py-0.5 text-[10px] font-medium text-orange-700 dark:bg-orange-900/30 dark:border-orange-700/50 dark:text-orange-300" title={`User selected ${r.user_selected_option_id} but AI recommended ${r.recommended_option_id} for this recurring issue`}>
-                                    <AlertTriangle className="h-2.5 w-2.5" />
-                                    Non-recommended
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                          </div>
+                          <code className="rounded bg-slate-100 px-2 py-1 font-mono text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                            {r.request_id}
+                          </code>
                         </td>
                         <td className="px-4 py-4 text-slate-700 dark:text-slate-200 w-24 max-w-24">
                           <div className="truncate" title={r.resident_id}>
@@ -499,29 +480,11 @@ export default function AdminDashboard() {
                       {expandedRow === r.request_id && (
                         <tr key={`${r.request_id}-details`}>
                           <td colSpan="11" className="bg-slate-50 px-6 py-6 dark:bg-slate-800/50">
-                            <div className="space-y-6">
-                              {/* Recurring Issue Alert */}
-                              {r.recurring_issue_non_escalated && (
-                                <div className="rounded-lg border border-amber-300 bg-amber-50/50 p-5 shadow-sm dark:border-amber-700/50 dark:bg-amber-900/20">
-                                  <div className="flex items-start gap-3">
-                                    <AlertTriangle className="h-5 w-5 flex-shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
-                                    <div className="flex-1">
-                                      <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">
-                                        Recurring Issue Notice
-                                      </h4>
-                                      <p className="text-sm leading-relaxed text-amber-800 dark:text-amber-200">
-                                        This resident has reported this issue multiple times. They selected <strong className="font-semibold">{r.user_selected_option_id}</strong> instead of escalating to admin support.
-                                        {r.recommended_option_id && r.user_selected_option_id !== r.recommended_option_id && (
-                                          <> The AI recommended <strong className="font-semibold">{r.recommended_option_id}</strong> for this recurring issue.</>
-                                        )}
-                                      </p>
-                                      <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
-                                        Consider reaching out to discuss a permanent solution or provide additional support.
-                                      </p>
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
+                            <div className="grid gap-4 md:grid-cols-2">
+                              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                                <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-200">Resident message</h4>
+                                <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{r.message_text}</p>
+                              </div>
 
                               {/* Top Section: Message and Selection Info */}
                               <div className="grid gap-4 md:grid-cols-2">
