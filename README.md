@@ -304,6 +304,7 @@ docker-compose -f docker-compose.microservices.yml down -v
 - Check RAG_ENABLED=true in Decision & Simulation service
 - Check logs: `docker-compose logs decision-simulation | grep -i rag`
 
+
 ---
 
 ## Deployment Documentation
