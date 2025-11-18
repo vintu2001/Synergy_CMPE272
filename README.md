@@ -17,7 +17,106 @@ The **Agentic Apartment Manager (AAM)** is an autonomous, AI-driven system that 
 ---
 
 ## System Architecture
-The Agentic Apartment Manager is built as a distributed, event-driven system on AWS Cloud, where containerized FastAPI microservices communicate asynchronously through Kafka or Kinesis to process resident messages and management events in real time. A LangChain-powered LLM interprets natural language inputs, and predictive models using XGBoost and ARIMA assess risk and recurrence probabilities. These outputs feed a reasoning engine built with CrewAI and SimPy, which simulates outcomes and autonomously triggers actions via AWS Lambda APIs. Data is stored in DynamoDB and PostgreSQL, monitored through Instana, CloudWatch, and Grafana. The result is a cohesive, self-learning architecture that continuously perceives, reasons, and acts to manage apartment operations predictively and autonomously.
+
+The Agentic Apartment Manager is a **microservices-based, event-driven system** that autonomously manages apartment operations using AI agents, RAG (Retrieval-Augmented Generation), and predictive analytics.
+
+### Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    PRESENTATION LAYER                            │
+│         Resident Portal | Admin Dashboard | Mobile App          │
+└───────────────────────────┬─────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              REQUEST MANAGEMENT SERVICE (8001)                   │
+│         API Gateway • Orchestration • Response Aggregation      │
+└─────┬─────────────────┬─────────────────┬────────────────────┬──┘
+      │                 │                 │                    │
+      ▼                 ▼                 ▼                    ▼
+┌──────────┐    ┌──────────────┐   ┌────────────┐    ┌──────────┐
+│    AI    │    │  DECISION &  │   │ EXECUTION  │    │   DATA   │
+│PROCESSING│───▶│ SIMULATION   │──▶│  SERVICE   │───▶│  LAYER   │
+│  (8002)  │    │   (8003)     │   │   (8004)   │    │          │
+└──────────┘    └──────────────┘   └────────────┘    └──────────┘
+Classification   RAG • Simulation   Work Orders      DynamoDB
+Intent Det.      Multi-Agent AI     Notifications    ChromaDB
+Risk Predict.    Decision Engine    Vendor Mgmt      AWS SQS
+```
+
+### Key Components
+
+1. **Request Management (Port 8001)**: API Gateway and orchestration hub
+2. **AI Processing (Port 8002)**: Classification, intent detection, risk prediction
+3. **Decision & Simulation (Port 8003)**: RAG-enhanced multi-agent decision making
+4. **Execution (Port 8004)**: Work order generation and notifications
+
+### Core Technologies
+- **Backend**: FastAPI (Python 3.10+)
+- **AI/ML**: Google Gemini 2.5 Flash, XGBoost
+- **RAG**: ChromaDB (466 documents), SentenceTransformers
+- **Data**: AWS DynamoDB, AWS SQS
+- **Frontend**: React 18, Vite, Tailwind CSS
+
+### Interactive Architecture Diagram
+
+```mermaid
+graph TB
+    subgraph Presentation["📱 PRESENTATION LAYER"]
+        A1[🌐 Resident Portal]
+        A2[📊 Admin Dashboard]
+        A3[📱 Mobile App]
+    end
+    
+    subgraph Gateway["� API GATEWAY"]
+        B[Request Management Service<br/>Port 8001<br/>Orchestration • Aggregation]
+    end
+    
+    subgraph Services["⚙️ MICROSERVICES"]
+        C[🧠 AI Processing<br/>Port 8002<br/>Classification • Intent • Risk]
+        D[🤖 Decision & Simulation<br/>Port 8003<br/>RAG • Multi-Agent • Scoring]
+        E[✅ Execution<br/>Port 8004<br/>Work Orders • Notifications]
+    end
+    
+    subgraph Data["💾 DATA LAYER"]
+        F[(DynamoDB<br/>Requests & Decisions)]
+        G[(ChromaDB<br/>466 KB Docs)]
+        H[(AWS SQS<br/>Message Queue)]
+    end
+    
+    subgraph External["☁️ EXTERNAL SERVICES"]
+        I[Google Gemini API<br/>LLM Processing]
+        J[AWS CloudWatch<br/>Logging & Monitoring]
+    end
+    
+    A1 & A2 & A3 -->|REST API| B
+    B -->|1. Classify| C
+    C -->|2. Simulate| D
+    D -->|3. Execute| E
+    E -->|4. Complete| B
+    
+    C -.->|LLM Calls| I
+    D -.->|LLM Calls| I
+    
+    B <-->|Store/Retrieve| F
+    C <-->|Risk Data| F
+    D <-->|RAG Query| G
+    E <-->|Async Jobs| H
+    
+    B & C & D & E -.->|Logs| J
+    
+    style Presentation fill:#E3F2FD,stroke:#1976D2,stroke-width:2px
+    style Gateway fill:#C8E6C9,stroke:#388E3C,stroke-width:2px
+    style C fill:#FFE0B2,stroke:#F57C00,stroke-width:2px
+    style D fill:#E1BEE7,stroke:#7B1FA2,stroke-width:2px
+    style E fill:#F8BBD0,stroke:#C2185B,stroke-width:2px
+    style Data fill:#FFF9C4,stroke:#F57F17,stroke-width:2px
+    style External fill:#ECEFF1,stroke:#607D8B,stroke-width:2px
+```
+
+�📖 **[View Detailed Architecture](./ARCHITECTURE.md)** - Complete system design, data flows, and technical specifications  
+🎨 **[Lucidchart Diagram Guide](./docs/LUCIDCHART_GUIDE.md)** - Instructions for creating professional diagrams
 
 ---
 
