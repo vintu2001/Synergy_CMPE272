@@ -26,7 +26,14 @@ describe('ResidentDashboard', () => {
       category: 'Maintenance',
       urgency: 'High',
       status: 'pending',
-      created_at: '2025-11-16T10:00:00Z'
+      created_at: '2025-11-16T10:00:00Z',
+      admin_comments: [
+        {
+          comment: 'We will send a technician tomorrow',
+          added_by: 'admin',
+          added_at: '2025-11-16T11:00:00Z'
+        }
+      ]
     },
     {
       request_id: 'REQ002',
@@ -34,7 +41,8 @@ describe('ResidentDashboard', () => {
       category: 'Billing',
       urgency: 'Low',
       status: 'completed',
-      created_at: '2025-11-15T14:30:00Z'
+      created_at: '2025-11-15T14:30:00Z',
+      admin_comments: []
     },
     {
       request_id: 'REQ003',
@@ -42,7 +50,8 @@ describe('ResidentDashboard', () => {
       category: 'Deliveries',
       urgency: 'Medium',
       status: 'in_progress',
-      created_at: '2025-11-14T09:15:00Z'
+      created_at: '2025-11-14T09:15:00Z',
+      admin_comments: null
     }
   ];
 
@@ -173,5 +182,53 @@ describe('ResidentDashboard', () => {
     await waitFor(() => {
       expect(api.getResidentRequests).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it('displays admin comments when available', async () => {
+    vi.mocked(api.getResidentRequests).mockResolvedValue(mockRequests);
+    
+    renderWithContext(<ResidentDashboard />);
+    
+    await waitFor(() => {
+      expect(screen.getByText(/AC not working/i)).toBeInTheDocument();
+    });
+    
+    await waitFor(() => {
+      expect(screen.getByText(/We will send a technician tomorrow/i)).toBeInTheDocument();
+      expect(screen.getByText(/Admin Comments/i)).toBeInTheDocument();
+    });
+  });
+
+  it('shows comment count badge when comments exist', async () => {
+    vi.mocked(api.getResidentRequests).mockResolvedValue(mockRequests);
+    
+    renderWithContext(<ResidentDashboard />);
+    
+    await waitFor(() => {
+      expect(screen.getByText(/AC not working/i)).toBeInTheDocument();
+    });
+    
+    await waitFor(() => {
+      // Should show comment count badge with title attribute
+      const commentBadge = screen.getByTitle(/1 admin comment/i);
+      expect(commentBadge).toBeInTheDocument();
+    });
+  });
+
+  it('does not show comment badge when no comments exist', async () => {
+    vi.mocked(api.getResidentRequests).mockResolvedValue(mockRequests);
+    
+    renderWithContext(<ResidentDashboard />);
+    
+    await waitFor(() => {
+      expect(screen.getByText(/Billing question/i)).toBeInTheDocument();
+    });
+    
+    // REQ002 has empty admin_comments array, so no badge should appear
+    const commentBadges = screen.queryAllByTitle(/admin comment/i);
+    const billingBadge = commentBadges.find(badge => 
+      badge.closest('tr')?.textContent?.includes('Billing question')
+    );
+    expect(billingBadge).toBeUndefined();
   });
 });

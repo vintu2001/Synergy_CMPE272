@@ -183,9 +183,23 @@ describe('AdminDashboard', () => {
     });
   });
 
-  it('handles request assignment to staff', async () => {
-    vi.mocked(api.getAllRequests).mockResolvedValue(mockRequests);
-    vi.mocked(api.assignRequest).mockResolvedValue({ success: true });
+  it('handles request status update via dropdown', async () => {
+    const mockRequestWithDetails = {
+      ...mockRequests[0],
+      request_id: 'REQ001',
+      status: 'Submitted',
+      simulated_options: []
+    };
+    
+    vi.mocked(api.getAllRequests).mockResolvedValue([mockRequestWithDetails]);
+    vi.mocked(api.updateRequestStatus).mockResolvedValue({ 
+      status: 'success',
+      message: 'Request status updated to In Progress',
+      request_id: 'REQ001'
+    });
+    
+    // Set API key in localStorage
+    localStorage.setItem('admin_api_key', 'test-api-key');
     
     renderWithContext(<AdminDashboard />);
     
@@ -193,23 +207,59 @@ describe('AdminDashboard', () => {
       expect(screen.getByText(/AC not working/i)).toBeInTheDocument();
     });
     
-    const assignButton = screen.getAllByText(/Assign/i)[0];
-    fireEvent.click(assignButton);
+    // Find and click the expand button (ChevronRight icon)
+    const expandButtons = screen.getAllByRole('button');
+    const expandButton = expandButtons.find(btn => {
+      const svg = btn.querySelector('svg');
+      return svg && (svg.getAttribute('data-lucide') === 'chevron-right' || svg.classList.contains('lucide-chevron-right'));
+    });
     
-    const staffSelect = screen.getByLabelText(/Staff Member/i);
-    fireEvent.change(staffSelect, { target: { value: 'STAFF001' } });
+    if (expandButton) {
+      fireEvent.click(expandButton);
+    }
     
-    const confirmButton = screen.getByText(/Confirm/i);
-    fireEvent.click(confirmButton);
+    // Wait for expanded content and find status dropdown
+    await waitFor(() => {
+      const statusSelect = screen.getByDisplayValue(/Submitted/i);
+      expect(statusSelect).toBeInTheDocument();
+      
+      // Change status
+      fireEvent.change(statusSelect, { target: { value: 'In Progress' } });
+    });
+    
+    // Wait for Update button to appear and click it
+    await waitFor(() => {
+      const updateButton = screen.getByText(/Update/i);
+      expect(updateButton).toBeInTheDocument();
+      fireEvent.click(updateButton);
+    });
     
     await waitFor(() => {
-      expect(api.assignRequest).toHaveBeenCalledWith('REQ001', 'STAFF001');
+      expect(api.updateRequestStatus).toHaveBeenCalledWith('REQ001', 'In Progress', 'test-api-key');
     });
   });
 
-  it('handles request status update', async () => {
-    vi.mocked(api.getAllRequests).mockResolvedValue(mockRequests);
-    vi.mocked(api.updateRequestStatus).mockResolvedValue({ success: true });
+  it('handles adding comments to requests', async () => {
+    const mockRequestWithDetails = {
+      ...mockRequests[0],
+      request_id: 'REQ001',
+      admin_comments: []
+    };
+    
+    vi.mocked(api.getAllRequests).mockResolvedValue([mockRequestWithDetails]);
+    vi.mocked(api.addComment).mockResolvedValue({ 
+      status: 'success',
+      message: 'Comment added successfully',
+      request_id: 'REQ001',
+      comment: {
+        comment: 'Test comment',
+        added_by: 'admin',
+        added_at: new Date().toISOString()
+      }
+    });
+    
+    // Set API key in localStorage
+    localStorage.setItem('admin_api_key', 'test-api-key');
     
     renderWithContext(<AdminDashboard />);
     
@@ -217,11 +267,73 @@ describe('AdminDashboard', () => {
       expect(screen.getByText(/AC not working/i)).toBeInTheDocument();
     });
     
-    const statusButtons = screen.getAllByText(/Mark Complete/i);
-    fireEvent.click(statusButtons[0]);
+    // Find and click the expand button
+    const expandButtons = screen.getAllByRole('button');
+    const expandButton = expandButtons.find(btn => {
+      const svg = btn.querySelector('svg');
+      return svg && (svg.getAttribute('data-lucide') === 'chevron-right' || svg.classList.contains('lucide-chevron-right'));
+    });
+    
+    if (expandButton) {
+      fireEvent.click(expandButton);
+    }
+    
+    // Wait for comment textarea and add comment
+    await waitFor(() => {
+      const commentTextarea = screen.getByPlaceholderText(/Add a comment for the resident/i);
+      expect(commentTextarea).toBeInTheDocument();
+      
+      fireEvent.change(commentTextarea, { target: { value: 'Test comment' } });
+    });
+    
+    // Wait for Add Comment button and click it
+    await waitFor(() => {
+      const addButton = screen.getByText(/Add Comment/i);
+      expect(addButton).toBeInTheDocument();
+      fireEvent.click(addButton);
+    });
     
     await waitFor(() => {
-      expect(api.updateRequestStatus).toHaveBeenCalledWith('REQ001', 'completed');
+      expect(api.addComment).toHaveBeenCalledWith('REQ001', 'Test comment', 'test-api-key');
+    });
+  });
+
+  it('displays admin comments in expanded view', async () => {
+    const mockRequestWithComments = {
+      ...mockRequests[0],
+      request_id: 'REQ001',
+      admin_comments: [
+        {
+          comment: 'We will send a technician tomorrow',
+          added_by: 'admin',
+          added_at: '2025-11-16T11:00:00Z'
+        }
+      ]
+    };
+    
+    vi.mocked(api.getAllRequests).mockResolvedValue([mockRequestWithComments]);
+    localStorage.setItem('admin_api_key', 'test-api-key');
+    
+    renderWithContext(<AdminDashboard />);
+    
+    await waitFor(() => {
+      expect(screen.getByText(/AC not working/i)).toBeInTheDocument();
+    });
+    
+    // Expand the row
+    const expandButtons = screen.getAllByRole('button');
+    const expandButton = expandButtons.find(btn => {
+      const svg = btn.querySelector('svg');
+      return svg && (svg.getAttribute('data-lucide') === 'chevron-right' || svg.classList.contains('lucide-chevron-right'));
+    });
+    
+    if (expandButton) {
+      fireEvent.click(expandButton);
+    }
+    
+    await waitFor(() => {
+      expect(screen.getByText(/Admin Comments/i)).toBeInTheDocument();
+      expect(screen.getByText(/We will send a technician tomorrow/i)).toBeInTheDocument();
     });
   });
 
