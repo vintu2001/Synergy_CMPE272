@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useUser } from "../context/UserContext";
 import { getResidentRequests, resolveRequest } from "../services/api";
 import LoadingSpinner from "../components/LoadingSpinner";
 import StatusBadge from "../components/StatusBadge";
 import Toast from "../components/Toast";
-import { Calendar, CheckCircle2, FileText, Filter, RefreshCw, User, UserCheck, X, Search } from "lucide-react";
+import { Calendar, CheckCircle2, FileText, Filter, RefreshCw, User, UserCheck, X, Search, MessageSquare } from "lucide-react";
 
 export default function ResidentDashboard() {
   const { residentId, residentName, setResidentId, setResidentName } = useUser();
@@ -175,54 +175,88 @@ export default function ResidentDashboard() {
                   </thead>
                   <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                     {filtered.map((item) => (
-                      <tr key={item.request_id} className="hover:bg-slate-50 dark:hover:bg-slate-800/60">
-                        <td className="whitespace-nowrap px-6 py-4 font-mono text-xs text-slate-600 dark:text-slate-300">
-                          {item.request_id}
-                        </td>
-                        <td className="max-w-xs px-6 py-4 text-slate-700 dark:text-slate-200">
-                          <p className="truncate" title={item.message_text}>
-                            {item.message_text}
-                          </p>
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4">
-                          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                            {item.category}
-                          </span>
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4">
-                          <span
-                            className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                              item.urgency === "High"
-                                ? "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-200"
-                                : item.urgency === "Medium"
-                                ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-200"
-                                : "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-200"
-                            }`}
-                          >
-                            {item.urgency}
-                          </span>
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4">
-                          <StatusBadge status={item.status} />
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-slate-600 dark:text-slate-300">
-                          <div className="flex items-center gap-2">
-                            <Calendar className="h-4 w-4" />
-                            {new Date(item.created_at).toLocaleDateString()}
-                          </div>
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4">
-                          {(item.status === "In Progress" || item.status === "IN_PROGRESS") && (
-                            <button
-                              onClick={() => setResolveModal({ requestId: item.request_id, requestText: item.message_text })}
-                              className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200 dark:bg-emerald-400 dark:text-emerald-950 dark:hover:bg-emerald-300"
+                      <React.Fragment key={item.request_id}>
+                        <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/60">
+                          <td className="whitespace-nowrap px-6 py-4 font-mono text-xs text-slate-600 dark:text-slate-300">
+                            {item.request_id}
+                          </td>
+                          <td className="max-w-xs px-6 py-4 text-slate-700 dark:text-slate-200">
+                            <p className="truncate" title={item.message_text}>
+                              {item.message_text}
+                            </p>
+                          </td>
+                          <td className="whitespace-nowrap px-6 py-4">
+                            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                              {item.category}
+                            </span>
+                          </td>
+                          <td className="whitespace-nowrap px-6 py-4">
+                            <span
+                              className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                                item.urgency === "High"
+                                  ? "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-200"
+                                  : item.urgency === "Medium"
+                                  ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-200"
+                                  : "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-200"
+                              }`}
                             >
-                              <CheckCircle2 className="h-4 w-4" />
-                              Mark resolved
-                            </button>
-                          )}
-                        </td>
-                      </tr>
+                              {item.urgency}
+                            </span>
+                          </td>
+                          <td className="whitespace-nowrap px-6 py-4">
+                            <StatusBadge status={item.status} />
+                          </td>
+                          <td className="whitespace-nowrap px-6 py-4 text-slate-600 dark:text-slate-300">
+                            <div className="flex items-center gap-2">
+                              <Calendar className="h-4 w-4" />
+                              {new Date(item.created_at).toLocaleDateString()}
+                            </div>
+                          </td>
+                          <td className="whitespace-nowrap px-6 py-4">
+                            <div className="flex items-center gap-2">
+                              {(item.status === "In Progress" || item.status === "IN_PROGRESS") && (
+                                <button
+                                  onClick={() => setResolveModal({ requestId: item.request_id, requestText: item.message_text })}
+                                  className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200 dark:bg-emerald-400 dark:text-emerald-950 dark:hover:bg-emerald-300"
+                                >
+                                  <CheckCircle2 className="h-4 w-4" />
+                                  Mark resolved
+                                </button>
+                              )}
+                              {item.admin_comments && item.admin_comments.length > 0 && (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" title={`${item.admin_comments.length} admin comment(s)`}>
+                                  <MessageSquare className="h-3 w-3" />
+                                  {item.admin_comments.length}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                        {item.admin_comments && item.admin_comments.length > 0 && (
+                          <tr className="bg-blue-50/50 dark:bg-blue-900/10">
+                            <td colSpan="7" className="px-6 py-4">
+                              <div className="rounded-lg border border-blue-200 bg-white p-4 dark:border-blue-800 dark:bg-slate-900">
+                                <div className="mb-2 flex items-center gap-2">
+                                  <MessageSquare className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                                  <h4 className="text-xs font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">
+                                    Admin Comments
+                                  </h4>
+                                </div>
+                                <div className="space-y-2">
+                                  {item.admin_comments.map((comment, idx) => (
+                                    <div key={idx} className="rounded-lg border border-blue-100 bg-blue-50/50 p-3 dark:border-blue-800/50 dark:bg-blue-900/20">
+                                      <p className="text-sm text-slate-700 dark:text-slate-200">{comment.comment}</p>
+                                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                        {new Date(comment.added_at).toLocaleString()}
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                     ))}
                   </tbody>
                 </table>
