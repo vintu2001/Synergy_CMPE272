@@ -6,3 +6,6 @@ google-generativeai
 fastapi
 pydantic
 python-dotenv
+locust
+psutil
+httpx
