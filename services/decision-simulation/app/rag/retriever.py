@@ -184,8 +184,6 @@ class RAGRetriever:
         
         # Use provided values or defaults
         k = top_k if top_k is not None else self.top_k
-        # If threshold is explicitly provided, use it; otherwise use default
-        # This allows callers to override the default threshold
         threshold = similarity_threshold if similarity_threshold is not None else self.similarity_threshold
         logger.info(f"Using similarity threshold: {threshold} (provided: {similarity_threshold}, default: {self.similarity_threshold})")
         
@@ -305,7 +303,7 @@ class RAGRetriever:
         
         # Use decision-specific defaults
         k = top_k if top_k is not None else 3  # Fewer docs for decision agent
-        threshold = similarity_threshold if similarity_threshold is not None else 0.75  # Higher precision
+        threshold = similarity_threshold if similarity_threshold is not None else self.similarity_threshold  # Use configured threshold
         
         # Enhance query with context
         enhanced_query = query
@@ -428,7 +426,6 @@ class RAGRetriever:
         """
         processed_docs = []
         
-        # ChromaDB returns results as parallel lists
         documents = results.get('documents', [[]])[0]
         metadatas = results.get('metadatas', [[]])[0]
         distances = results.get('distances', [[]])[0]
@@ -437,10 +434,8 @@ class RAGRetriever:
             # Convert distance to similarity score (cosine distance → similarity)
             similarity_score = 1.0 - distance
             
-            # Log similarity scores for debugging
             logger.info(f"Document {metadata.get('doc_id', 'unknown')}: similarity={similarity_score:.4f}, category={metadata.get('category', 'unknown')}, type={metadata.get('type', 'unknown')}")
             
-            # Filter by threshold
             if similarity_score < similarity_threshold:
                 logger.debug(f"Filtered out document {metadata.get('doc_id', 'unknown')} with score {similarity_score:.4f} < threshold {similarity_threshold}")
                 continue
@@ -569,7 +564,6 @@ async def answer_question(
     logger.info(f"Answering question: '{question[:100]}...'")
     
     try:
-        # Retrieve relevant documents with very low threshold for questions
         # Questions need broader matching since they're often phrased differently
         retrieval_context = await retrieve_relevant_docs(
             query=question,
@@ -616,7 +610,6 @@ async def answer_question(
             rag_context=context_text
         )
         
-        # If no relevant docs found, return the LLM answer anyway (it will say it doesn't have info)
         source_docs = []
         if retrieval_context and retrieval_context.retrieved_docs:
             source_docs = [

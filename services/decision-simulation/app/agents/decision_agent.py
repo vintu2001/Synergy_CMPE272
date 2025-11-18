@@ -199,7 +199,8 @@ def generate_decision_reasoning(
     all_options: List[SimulatedOption],
     classification: ClassificationResponse,
     weights: PolicyWeights = DEFAULT_WEIGHTS,
-    config: PolicyConfiguration = DEFAULT_CONFIG
+    config: PolicyConfiguration = DEFAULT_CONFIG,
+    is_recurring: bool = False
 ) -> DecisionReasoning:
     """Generate comprehensive decision reasoning with detailed analysis."""
     option, score = chosen_option
@@ -230,6 +231,17 @@ def generate_decision_reasoning(
     for factor, contribution in factor_breakdown.items():
         considerations.append(f"- {factor.replace('_', ' ').title()}: {contribution:.2f}")
     
+    # Add recurring issue information if applicable
+    if is_recurring:
+        is_permanent = getattr(option, 'is_permanent_solution', False)
+        if is_permanent:
+            considerations.append("\nRecurring Issue Handling:")
+            considerations.append("- This is a recurring issue; permanent solution selected")
+            considerations.append("- Permanent solutions receive priority for recurring problems")
+        else:
+            considerations.append("\nRecurring Issue Handling:")
+            considerations.append("- This is a recurring issue; temporary solution selected as best balance")
+    
     # Add comparative insights
     considerations.extend([f"Comparative Analysis:", *[f"- {insight}" for insight in comparative_insights]])
     
@@ -243,11 +255,9 @@ def generate_decision_reasoning(
                 f"time: {opt.estimated_time:.1f}h)"
             )
     
-    # Check thresholds
     exceeds_cost_threshold = any(analysis.exceeds_scale for analysis in cost_analysis)
     exceeds_time_threshold = any(analysis.exceeds_scale for analysis in time_analysis)
     
-    # Add threshold warnings if applicable
     if exceeds_cost_threshold or exceeds_time_threshold:
         considerations.append("\nThreshold Warnings:")
         if exceeds_cost_threshold:
@@ -430,9 +440,34 @@ async def make_decision(
             for opt in request.simulation.options
         ]
         
+        # RECURRING ISSUE HANDLING: If this is a recurring issue, recommend escalate_to_human
+        if request.simulation.is_recurring:
+            logger.info(f"Recurring issue detected. Will recommend escalate_to_human option.")
+            adjusted_scored_options = []
+            for opt, score in scored_options:
+                is_permanent = getattr(opt, 'is_permanent_solution', False)
+                
+                if is_permanent:
+                    boosted_score = min(score * 1.15, 1.0)
+                    logger.info(f"Option {opt.option_id} ({opt.action}): permanent solution, boosting score from {score:.3f} to {boosted_score:.3f}")
+                    adjusted_scored_options.append((opt, boosted_score))
+                else:
+                    adjusted_score = max(score * 0.95, 0.0)
+                    logger.info(f"Option {opt.option_id} ({opt.action}): temporary solution, adjusted score from {score:.3f} to {adjusted_score:.3f}")
+                    adjusted_scored_options.append((opt, adjusted_score))
+            
+            scored_options = adjusted_scored_options
+        
         # Select best option
         best_option = max(scored_options, key=lambda x: x[1])
         option, score = best_option
+        
+        # For recurring issues, override to recommend escalate_to_human
+        if request.simulation.is_recurring:
+            recommended_option_id = "escalate_to_human"
+            logger.info(f"Recurring issue: Recommending escalate_to_human option (best option was {option.option_id} with score {score:.3f})")
+        else:
+            recommended_option_id = option.option_id
         
         # Generate enhanced reasoning
         reasoning = generate_decision_reasoning(
@@ -441,7 +476,8 @@ async def make_decision(
             request.simulation.options,
             request.classification,
             request.weights,
-            request.config
+            request.config,
+            is_recurring=request.simulation.is_recurring
         )
         
         # Create a comprehensive response reasoning
@@ -462,7 +498,6 @@ async def make_decision(
         elif score > 0.8:
             response_parts.append("Optimal balance of cost and effectiveness")
         
-        # Add threshold warnings if needed
         warnings = []
         if reasoning.exceeds_budget_threshold:
             warnings.append("Some options exceed budget threshold")
@@ -486,7 +521,8 @@ async def make_decision(
             policy_scores=reasoning.policy_scores,
             escalation_reason=None,
             rule_sources=rule_sources if rule_sources else None,  # Include RAG sources
-            rule_object=None
+            rule_object=None,
+            recommended_option_id=recommended_option_id
         )
         
         return DecisionResponseWithStatus(

@@ -14,6 +14,8 @@ from typing import List, Dict, Any, Optional
 import logging
 import os
 
+import simpy
+import random
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -102,7 +104,6 @@ class AgenticResolutionSimulator:
                     complexity_analysis=complexity_analysis
                 )
                 
-                # Generate phased options from reasoning chain
                 phased_options = await self.multi_step_reasoner.create_phased_options(
                     reasoning_chain=reasoning_chain,
                     category=category.value,
@@ -110,7 +111,6 @@ class AgenticResolutionSimulator:
                 )
                 
                 if phased_options:
-                    # Convert phased options to SimulatedOption objects
                     options = []
                     for phased_opt in phased_options:
                         option = SimulatedOption(
@@ -119,12 +119,17 @@ class AgenticResolutionSimulator:
                             estimated_cost=float(phased_opt['estimated_cost']),
                             estimated_time=float(phased_opt.get('time_to_resolution', phased_opt.get('estimated_time', 1.0))),
                             reasoning=phased_opt.get('reasoning', 'Multi-step phased resolution approach'),
-                            source_doc_ids=None  # Phased options from reasoning, not RAG
+                            source_doc_ids=None
                         )
                         options.append(option)
                     
-                    logger.info(f"Generated {len(options)} phased options from multi-step reasoning")
-                    return options
+                    is_recurring_from_tools = tools_data.get('recurring', {}).get('is_recurring', False)
+                    
+                    logger.info(f"Generated {len(options)} phased options from multi-step reasoning (is_recurring={is_recurring_from_tools})")
+                    return {
+                        'options': options,
+                        'is_recurring': is_recurring_from_tools
+                    }
             
             rag_context = None
             building_id = None
@@ -178,12 +183,9 @@ class AgenticResolutionSimulator:
                 rag_context=rag_context  # Pass RAG context to LLM
             )
             
-            # Check for errors
             if 'error' in llm_response:
                 error_info = llm_response['error']
                 logger.error(f"LLM generation failed: {error_info['type']}")
-                
-                # Return error to be handled by caller - NO FALLBACK TO TEMPLATES
                 raise HTTPException(
                     status_code=503,
                     detail={
@@ -194,8 +196,15 @@ class AgenticResolutionSimulator:
                     }
                 )
             
-            # Convert LLM response to SimulatedOption objects
-            # Extract source document IDs from RAG context
+            is_recurring_from_tools = tools_data.get('recurring', {}).get('is_recurring', False)
+            is_recurring_from_llm = llm_response.get('is_recurring', False)
+            is_recurring = is_recurring_from_tools or is_recurring_from_llm
+            
+            if is_recurring_from_tools:
+                logger.info(f"Recurring issue detected by tools: {tools_data.get('recurring')}")
+            if is_recurring_from_llm:
+                logger.info(f"Recurring issue detected by LLM")
+            
             source_doc_ids = []
             if rag_context and rag_context.retrieved_docs:
                 source_doc_ids = [doc['doc_id'] for doc in rag_context.retrieved_docs if 'doc_id' in doc]
@@ -255,17 +264,24 @@ class AgenticResolutionSimulator:
                 options.append(escalation_option)
                 logger.info(f"Added human escalation option due to missing RAG context (total options: {len(options)})")
             
-            logger.info(f"Successfully generated {len(options)} agentic options with {len(source_doc_ids)} RAG sources (rag_fallback={rag_fallback_needed})")
-            return options
+            occurrence_count = None
+            if is_recurring:
+                occurrence_count = tools_data.get('recurring', {}).get('occurrence_count', 2)
+                logger.info(f"Recurring issue detected (occurrence_count={occurrence_count}). Escalate to human option should be recommended.")
+            
+            logger.info(f"Successfully generated {len(options)} agentic options with {len(source_doc_ids)} RAG sources (is_recurring={is_recurring}, rag_fallback={rag_fallback_needed})")
+            
+            return {
+                'options': options,
+                'is_recurring': is_recurring,
+                'occurrence_count': occurrence_count
+            }
         
         except HTTPException:
-            # Re-raise HTTP exceptions (these are intended for the API)
             raise
         
         except Exception as e:
             logger.error(f"Unexpected error in agentic option generation: {e}")
-            
-            # Log to CloudWatch
             from app.utils.llm_client import log_error_to_cloudwatch
             log_error_to_cloudwatch(
                 error_type="SIMULATOR_ERROR",
@@ -277,7 +293,6 @@ class AgenticResolutionSimulator:
                 }
             )
             
-            # Return user-friendly error - NO FALLBACK TO TEMPLATES
             raise HTTPException(
                 status_code=503,
                 detail={
@@ -289,7 +304,6 @@ class AgenticResolutionSimulator:
             )
 
 
-# Global instance - AGENTIC simulator
 simulator = AgenticResolutionSimulator()
 
 
@@ -336,13 +350,10 @@ async def simulate_resolutions(
         )
     
     except HTTPException:
-        # Re-raise HTTPExceptions (contain user-friendly error messages)
         raise
     
     except Exception as e:
         logger.error(f"Unexpected error in simulation endpoint: {e}")
-        
-        # Log to CloudWatch
         from app.utils.llm_client import log_error_to_cloudwatch
         log_error_to_cloudwatch(
             error_type="SIMULATION_ENDPOINT_ERROR",
@@ -354,7 +365,6 @@ async def simulate_resolutions(
             }
         )
         
-        # NO FALLBACK - Return user-friendly error
         raise HTTPException(
             status_code=503,
             detail={
