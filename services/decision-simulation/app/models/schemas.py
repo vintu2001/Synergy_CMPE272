@@ -57,12 +57,15 @@ class SimulatedOption(BaseModel):
     source_doc_ids: Optional[List[str]] = None
     resident_satisfaction_impact: Optional[float] = Field(None, ge=0.0, le=1.0)
     steps: Optional[List[str]] = None
+    is_permanent_solution: Optional[bool] = False
+    requires_resident_action: Optional[bool] = False
     model_config = {"exclude_none": False}
 
 
 class SimulationResponse(BaseModel):
     options: List[SimulatedOption]
     issue_id: str
+    is_recurring: bool = False
 
 
 class PolicyWeights(BaseModel):
@@ -113,6 +116,7 @@ class DecisionResponse(BaseModel):
     escalation_reason: Optional[str] = None
     rule_sources: Optional[List[str]] = None
     rule_object: Optional[Dict[str, Any]] = None
+    recommended_option_id: Optional[str] = None
 
 
 class DecisionResponseWithStatus(BaseModel):
