@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { getAllRequests, resolveRequest } from "../services/api";
+import { getAllRequests, resolveRequest, updateRequestStatus, addComment } from "../services/api";
 import LoadingSpinner from "../components/LoadingSpinner";
 import StatusBadge from "../components/StatusBadge";
-import { Shield, Search, Filter, RefreshCw, Eye, EyeOff, Key, ChevronDown, ChevronRight, DollarSign, Clock, Heart, AlertTriangle, UserX, CheckCircle2 } from "lucide-react";
+import { Shield, Search, Filter, RefreshCw, Eye, EyeOff, Key, ChevronDown, ChevronRight, DollarSign, Clock, Heart, AlertTriangle, UserX, CheckCircle2, ChevronLeft, MessageSquare, Save } from "lucide-react";
 
 export default function AdminDashboard() {
   const [apiKey, setApiKey] = useState(localStorage.getItem("admin_api_key") || "");
@@ -24,6 +24,14 @@ export default function AdminDashboard() {
   const [resolving, setResolving] = useState(false);
   const [resolutionNotes, setResolutionNotes] = useState("");
   const [toast, setToast] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 50;
+  const [statusUpdateModal, setStatusUpdateModal] = useState(null);
+  const [newStatus, setNewStatus] = useState("");
+  const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [commentModal, setCommentModal] = useState(null);
+  const [newComment, setNewComment] = useState("");
+  const [addingComment, setAddingComment] = useState(false);
 
   async function load() {
     if (!apiKey) return;
@@ -59,6 +67,40 @@ export default function AdminDashboard() {
       setToast({ message: "Failed to resolve request. Please try again.", type: "error" });
     } finally {
       setResolving(false);
+    }
+  };
+
+  const handleStatusUpdate = async () => {
+    if (!statusUpdateModal || !newStatus) return;
+    
+    setUpdatingStatus(true);
+    try {
+      await updateRequestStatus(statusUpdateModal.requestId, newStatus, apiKey);
+      setToast({ message: `Status updated to ${newStatus}`, type: "success" });
+      setStatusUpdateModal(null);
+      setNewStatus("");
+      load();
+    } catch (e) {
+      setToast({ message: "Failed to update status. Please try again.", type: "error" });
+    } finally {
+      setUpdatingStatus(false);
+    }
+  };
+
+  const handleAddComment = async () => {
+    if (!commentModal || !newComment.trim()) return;
+    
+    setAddingComment(true);
+    try {
+      await addComment(commentModal.requestId, newComment.trim(), apiKey);
+      setToast({ message: "Comment added successfully", type: "success" });
+      setCommentModal(null);
+      setNewComment("");
+      load();
+    } catch (e) {
+      setToast({ message: "Failed to add comment. Please try again.", type: "error" });
+    } finally {
+      setAddingComment(false);
     }
   };
 
@@ -103,6 +145,18 @@ export default function AdminDashboard() {
     });
     return arr;
   }, [filtered, sortField, sortDir]);
+
+  // Pagination
+  const totalPages = Math.ceil(sorted.length / itemsPerPage);
+  const paginatedItems = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return sorted.slice(startIndex, startIndex + itemsPerPage);
+  }, [sorted, currentPage, itemsPerPage]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [category, urgency, status, search, urgentOnly, requireHumanOnly, escalatedOnly, sortField, sortDir]);
 
   function saveKey() {
     localStorage.setItem("admin_api_key", apiKey);
@@ -190,7 +244,7 @@ export default function AdminDashboard() {
                 />
               </div>
               <div className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-600 shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
-                Total: <span className="font-semibold text-slate-800 dark:text-slate-100">{sorted.length}</span>
+                Showing: <span className="font-semibold text-slate-800 dark:text-slate-100">{sorted.length}</span> of <span className="font-semibold text-slate-800 dark:text-slate-100">{items.length}</span>
               </div>
             </div>
 
@@ -285,23 +339,6 @@ export default function AdminDashboard() {
               </button>
             </div>
 
-            {/* Recurring Issues Alert Banner */}
-            {items.filter((r) => r.recurring_issue_non_escalated).length > 0 && (
-              <div className="rounded-lg border-2 border-amber-400 bg-gradient-to-r from-amber-50 to-orange-50 p-4 shadow-lg">
-                <div className="flex items-center gap-3">
-                  <AlertTriangle className="h-5 w-5 flex-shrink-0 text-amber-600" />
-                  <div className="flex-1">
-                    <h4 className="text-sm font-bold text-amber-900">
-                      Recurring Issues Requiring Attention
-                    </h4>
-                    <p className="mt-1 text-xs text-amber-800">
-                      {items.filter((r) => r.recurring_issue_non_escalated).length} user(s) have recurring issues but chose not to escalate. 
-                      Please review these requests and consider reaching out to discuss permanent solutions.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
 
         {loading ? (
@@ -323,59 +360,71 @@ export default function AdminDashboard() {
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
+                <thead className="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-slate-800 dark:to-slate-900">
                   <tr>
-                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700 dark:text-slate-200">
                       Request ID
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
+                    <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700 dark:text-slate-200 w-24 max-w-24">
                       Resident
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700 dark:text-slate-200">
                       Category
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700 dark:text-slate-200">
                       Urgency
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700 dark:text-slate-200">
                       Status
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700 dark:text-slate-200">
                       Confidence
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700 dark:text-slate-200">
                       Risk
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700 dark:text-slate-200">
                       Options
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700 dark:text-slate-200">
                       Created
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700">
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-700 dark:text-slate-200">
                       Details
                     </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                  {sorted.map((r) => (
+                  {paginatedItems.map((r) => (
                     <React.Fragment key={r.request_id}>
                       <tr className={`hover:bg-slate-50 dark:hover:bg-slate-800/60 ${r.recurring_issue_non_escalated ? 'bg-amber-50/50 dark:bg-amber-900/20 border-l-4 border-amber-400' : ''}`}>
                         <td className="whitespace-nowrap px-6 py-4 text-xs text-slate-600 dark:text-slate-300">
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-col gap-1.5">
                             <code className="rounded bg-slate-100 px-2 py-1 font-mono text-slate-700 dark:bg-slate-800 dark:text-slate-200">
                               {r.request_id}
                             </code>
-                            {r.recurring_issue_non_escalated && (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-200">
-                                <AlertTriangle className="h-3 w-3" />
-                                Recurring
-                              </span>
+                            {(r.recurring_issue_non_escalated || (r.recurring_issue_non_escalated && r.user_selected_option_id && r.recommended_option_id && r.user_selected_option_id !== r.recommended_option_id)) && (
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {r.recurring_issue_non_escalated && (
+                                  <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 border border-amber-200 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/30 dark:border-amber-700/50 dark:text-amber-300" title="Recurring issue - User chose option other than escalation">
+                                    <AlertTriangle className="h-2.5 w-2.5" />
+                                    Recurring
+                                  </span>
+                                )}
+                                {r.recurring_issue_non_escalated && r.user_selected_option_id && r.recommended_option_id && r.user_selected_option_id !== r.recommended_option_id && (
+                                  <span className="inline-flex items-center gap-1 rounded-md bg-orange-50 border border-orange-200 px-2 py-0.5 text-[10px] font-medium text-orange-700 dark:bg-orange-900/30 dark:border-orange-700/50 dark:text-orange-300" title={`User selected ${r.user_selected_option_id} but AI recommended ${r.recommended_option_id} for this recurring issue`}>
+                                    <AlertTriangle className="h-2.5 w-2.5" />
+                                    Non-recommended
+                                  </span>
+                                )}
+                              </div>
                             )}
                           </div>
                         </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-slate-700 dark:text-slate-200">
-                          {r.resident_id}
+                        <td className="px-4 py-4 text-slate-700 dark:text-slate-200 w-24 max-w-24">
+                          <div className="truncate" title={r.resident_id}>
+                            {r.resident_id}
+                          </div>
                         </td>
                         <td className="whitespace-nowrap px-6 py-4">
                           <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
@@ -450,123 +499,242 @@ export default function AdminDashboard() {
                       {expandedRow === r.request_id && (
                         <tr key={`${r.request_id}-details`}>
                           <td colSpan="11" className="bg-slate-50 px-6 py-6 dark:bg-slate-800/50">
-                            <div className="grid gap-4 md:grid-cols-2">
-                              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-                                <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-200">Resident message</h4>
-                                <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{r.message_text}</p>
-                              </div>
-
-                              {/* Recurring Issue Non-Escalated Alert */}
+                            <div className="space-y-6">
+                              {/* Recurring Issue Alert */}
                               {r.recurring_issue_non_escalated && (
-                                <div className="rounded-lg border-2 border-amber-400 bg-gradient-to-r from-amber-50 to-orange-50 p-4 shadow-lg">
+                                <div className="rounded-lg border border-amber-300 bg-amber-50/50 p-5 shadow-sm dark:border-amber-700/50 dark:bg-amber-900/20">
                                   <div className="flex items-start gap-3">
-                                    <AlertTriangle className="h-5 w-5 flex-shrink-0 text-amber-600" />
+                                    <AlertTriangle className="h-5 w-5 flex-shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
                                     <div className="flex-1">
-                                      <h4 className="mb-2 text-sm font-bold text-amber-900">⚠️ Recurring Issue Alert</h4>
-                                      <p className="mb-2 text-sm text-amber-800">
-                                        This user has been facing this issue <strong>frequently</strong> and chose an option other than escalating to admin.
+                                      <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">
+                                        Recurring Issue Notice
+                                      </h4>
+                                      <p className="text-sm leading-relaxed text-amber-800 dark:text-amber-200">
+                                        This resident has reported this issue multiple times. They selected <strong className="font-semibold">{r.user_selected_option_id}</strong> instead of escalating to admin support.
+                                        {r.recommended_option_id && r.user_selected_option_id !== r.recommended_option_id && (
+                                          <> The AI recommended <strong className="font-semibold">{r.recommended_option_id}</strong> for this recurring issue.</>
+                                        )}
                                       </p>
-                                      <p className="text-xs text-amber-700">
-                                        <strong>Action Required:</strong> Please check with the user if they need any help or if there are any concerns. 
-                                        Consider reaching out to discuss a permanent solution for this recurring issue.
+                                      <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+                                        Consider reaching out to discuss a permanent solution or provide additional support.
                                       </p>
                                     </div>
                                   </div>
                                 </div>
                               )}
 
-                              {/* User Selection Info */}
-                              {r.user_selected_option_id && (
-                                <div className="rounded-lg bg-gradient-to-r from-green-50 to-emerald-50 p-4 shadow">
-                                  <h4 className="mb-2 text-sm font-semibold text-gray-700">✅ User Selection</h4>
+                              {/* Top Section: Message and Selection Info */}
+                              <div className="grid gap-4 md:grid-cols-2">
+                                {/* Resident Message */}
+                                <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                                  <h4 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                    Resident Message
+                                  </h4>
+                                  <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-200">{r.message_text}</p>
+                                </div>
+
+                                {/* User Selection & Recommendation */}
+                                {r.user_selected_option_id && (
+                                  <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                                    <h4 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                      Selection Details
+                                    </h4>
+                                    <div className="space-y-3">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-sm text-slate-600 dark:text-slate-300">Selected:</span>
+                                        <span className="rounded-md bg-slate-100 px-2 py-1 text-sm font-semibold text-slate-900 dark:bg-slate-800 dark:text-slate-100">
+                                          {r.user_selected_option_id}
+                                        </span>
+                                      </div>
+                                      {r.recommended_option_id && (
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-sm text-slate-600 dark:text-slate-300">AI Recommended:</span>
+                                          <span className={`rounded-md px-2 py-1 text-sm font-semibold ${
+                                            r.user_selected_option_id === r.recommended_option_id
+                                              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
+                                              : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+                                          }`}>
+                                            {r.recommended_option_id}
+                                          </span>
+                                          {r.user_selected_option_id === r.recommended_option_id && (
+                                            <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Admin Actions */}
+                              <div className="grid gap-4 md:grid-cols-2">
+                                {/* Status Update */}
+                                <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                                  <h4 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                    Update Status
+                                  </h4>
                                   <div className="flex items-center gap-3">
-                                    <span className="text-sm text-gray-900">
-                                      User selected: <strong>{r.user_selected_option_id}</strong>
-                                    </span>
-                                    {r.recommended_option_id && (
-                                      <>
-                                        <span className="text-gray-400">•</span>
-                                        {r.user_selected_option_id === r.recommended_option_id ? (
-                                          <span className="flex items-center gap-1 text-sm font-semibold text-green-600">
-                                            <CheckCircle2 className="h-4 w-4" />
-                                            Matches AI recommendation
-                                          </span>
-                                        ) : (
-                                          <span className="flex items-center gap-1 text-sm font-semibold text-orange-600">
-                                            ⚠️ AI recommended: {r.recommended_option_id}
-                                          </span>
-                                        )}
-                                      </>
+                                    <select
+                                      value={r.status}
+                                      onChange={(e) => {
+                                        setStatusUpdateModal({ requestId: r.request_id, currentStatus: r.status });
+                                        setNewStatus(e.target.value);
+                                      }}
+                                      className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-200 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:focus:border-slate-400 dark:focus:ring-slate-700"
+                                    >
+                                      <option value="Submitted">Submitted</option>
+                                      <option value="Processing">Processing</option>
+                                      <option value="In Progress">In Progress</option>
+                                      <option value="Resolved">Resolved</option>
+                                      <option value="Escalated">Escalated</option>
+                                    </select>
+                                    {statusUpdateModal?.requestId === r.request_id && newStatus !== r.status && (
+                                      <button
+                                        onClick={handleStatusUpdate}
+                                        disabled={updatingStatus}
+                                        className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
+                                      >
+                                        <Save className="h-4 w-4" />
+                                        {updatingStatus ? "Updating..." : "Update"}
+                                      </button>
                                     )}
+                                  </div>
+                                </div>
+
+                                {/* Add Comment */}
+                                <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                                  <h4 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                    Add Comment
+                                  </h4>
+                                  <div className="space-y-2">
+                                    <textarea
+                                      placeholder="Add a comment for the resident..."
+                                      value={commentModal?.requestId === r.request_id ? newComment : ""}
+                                      onChange={(e) => {
+                                        setCommentModal({ requestId: r.request_id });
+                                        setNewComment(e.target.value);
+                                      }}
+                                      rows={3}
+                                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-200 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:focus:border-slate-400 dark:focus:ring-slate-700"
+                                    />
+                                    {commentModal?.requestId === r.request_id && newComment.trim() && (
+                                      <button
+                                        onClick={handleAddComment}
+                                        disabled={addingComment}
+                                        className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
+                                      >
+                                        <MessageSquare className="h-4 w-4" />
+                                        {addingComment ? "Adding..." : "Add Comment"}
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Admin Comments */}
+                              {r.admin_comments && r.admin_comments.length > 0 && (
+                                <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                                  <h4 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                    Admin Comments
+                                  </h4>
+                                  <div className="space-y-3">
+                                    {r.admin_comments.map((comment, idx) => (
+                                      <div key={idx} className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/50">
+                                        <p className="text-sm text-slate-700 dark:text-slate-200">{comment.comment}</p>
+                                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                          {comment.added_by} • {new Date(comment.added_at).toLocaleString()}
+                                        </p>
+                                      </div>
+                                    ))}
                                   </div>
                                 </div>
                               )}
 
-                              {r.user_selected_option_id && (
-                                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm dark:border-emerald-900/40 dark:bg-emerald-900/20">
-                                  <h4 className="text-sm font-semibold text-emerald-700 dark:text-emerald-200">Resident choice</h4>
-                                  <p className="mt-1 text-sm text-emerald-700 dark:text-emerald-100">
-                                    Selected option <strong>{r.user_selected_option_id}</strong>
-                                  </p>
-                                  {r.recommended_option_id && r.user_selected_option_id !== r.recommended_option_id && (
-                                    <p className="text-xs text-amber-600 dark:text-amber-300">AI suggested {r.recommended_option_id}</p>
-                                  )}
-                                </div>
-                              )}
-
+                              {/* Simulated Resolution Options */}
                               {r.simulated_options && r.simulated_options.length > 0 && (
-                                <div>
-                                  <h4 className="mb-3 text-sm font-semibold text-gray-700">
-                                    🎯 Simulated Resolution Options
+                                <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                                  <h4 className="mb-4 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                    Simulated Resolution Options
                                   </h4>
                                   <div className="grid gap-4 md:grid-cols-3">
-                                    {r.simulated_options.map((opt, idx) => (
-                                      <div
-                                        key={opt.option_id}
-                                        className="rounded-lg bg-white p-4 shadow-md transition-all hover:shadow-lg"
-                                      >
-                                        <div className="mb-3 flex items-center gap-2">
-                                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-r from-blue-500 to-purple-500 text-xs font-bold text-white">
-                                            {idx + 1}
-                                          </span>
-                                          <span className="text-xs font-semibold text-gray-500">
-                                            {opt.option_id}
-                                          </span>
-                                        </div>
-                                        <h5 className="mb-3 text-sm font-bold text-gray-900">{opt.action}</h5>
-                                        <div className="space-y-2">
-                                          <div className="flex items-center justify-between text-xs">
-                                            <span className="flex items-center gap-1 text-gray-600">
-                                              <DollarSign className="h-3 w-3" />
-                                              Cost
-                                            </span>
-                                            <span className="font-semibold text-green-600">
-                                              ${Number(opt.estimated_cost).toFixed(2)}
-                                            </span>
-                                          </div>
-                                          <div className="flex items-center justify-between text-xs">
-                                            <span className="flex items-center gap-1 text-gray-600">
-                                              <Clock className="h-3 w-3" />
-                                              Time
-                                            </span>
-                                            <span className="font-semibold text-blue-600">
-                                              {Number(opt.estimated_time).toFixed(1)}h
-                                            </span>
-                                          </div>
-                                          {opt.resident_satisfaction_impact != null && (
-                                            <div className="flex items-center justify-between text-xs">
-                                              <span className="flex items-center gap-1 text-gray-600">
-                                                <Heart className="h-3 w-3" />
-                                                Satisfaction
+                                    {r.simulated_options.map((opt, idx) => {
+                                      const isSelected = r.user_selected_option_id === opt.option_id;
+                                      const isRecommended = r.recommended_option_id === opt.option_id;
+                                      return (
+                                        <div
+                                          key={opt.option_id}
+                                          className={`relative rounded-lg border p-4 transition-all ${
+                                            isSelected
+                                              ? "border-emerald-300 bg-emerald-50/50 shadow-md dark:border-emerald-700 dark:bg-emerald-900/20"
+                                              : isRecommended
+                                              ? "border-amber-300 bg-amber-50/50 shadow-md dark:border-amber-700 dark:bg-amber-900/20"
+                                              : "border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800"
+                                          }`}
+                                        >
+                                          {/* Badge indicators */}
+                                          <div className="mb-3 flex items-center justify-between">
+                                            <div className="flex items-center gap-2">
+                                              <span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold text-white ${
+                                                idx === 0 ? "bg-gradient-to-r from-blue-500 to-purple-500" :
+                                                idx === 1 ? "bg-gradient-to-r from-blue-400 to-cyan-500" :
+                                                "bg-gradient-to-r from-slate-400 to-slate-500"
+                                              }`}>
+                                                {idx + 1}
                                               </span>
-                                              <span className="font-semibold text-red-600">
-                                                {(Number(opt.resident_satisfaction_impact) * 100).toFixed(0)}%
+                                              <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
+                                                {opt.option_id}
                                               </span>
                                             </div>
-                                          )}
+                                            {isSelected && (
+                                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                                                Selected
+                                              </span>
+                                            )}
+                                            {isRecommended && !isSelected && (
+                                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+                                                Recommended
+                                              </span>
+                                            )}
+                                          </div>
+                                          
+                                          <h5 className="mb-4 text-sm font-semibold leading-snug text-slate-900 dark:text-slate-100">
+                                            {opt.action}
+                                          </h5>
+                                          
+                                          <div className="space-y-2.5 border-t border-slate-200 pt-3 dark:border-slate-700">
+                                            <div className="flex items-center justify-between text-xs">
+                                              <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
+                                                <DollarSign className="h-3.5 w-3.5" />
+                                                Cost
+                                              </span>
+                                              <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                                                ${Number(opt.estimated_cost).toFixed(2)}
+                                              </span>
+                                            </div>
+                                            <div className="flex items-center justify-between text-xs">
+                                              <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
+                                                <Clock className="h-3.5 w-3.5" />
+                                                Time
+                                              </span>
+                                              <span className="font-semibold text-blue-600 dark:text-blue-400">
+                                                {Number(opt.estimated_time).toFixed(1)}h
+                                              </span>
+                                            </div>
+                                            {opt.resident_satisfaction_impact != null && (
+                                              <div className="flex items-center justify-between text-xs">
+                                                <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
+                                                  <Heart className="h-3.5 w-3.5" />
+                                                  Satisfaction
+                                                </span>
+                                                <span className="font-semibold text-rose-600 dark:text-rose-400">
+                                                  {(Number(opt.resident_satisfaction_impact) * 100).toFixed(0)}%
+                                                </span>
+                                              </div>
+                                            )}
+                                          </div>
                                         </div>
-                                      </div>
-                                    ))}
+                                      );
+                                    })}
                                   </div>
                                 </div>
                               )}
@@ -579,6 +747,70 @@ export default function AdminDashboard() {
                 </tbody>
               </table>
             </div>
+            
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between border-t border-slate-200 bg-white px-6 py-4 dark:border-slate-800 dark:bg-slate-900">
+                <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                  <span>
+                    Showing <span className="font-semibold text-slate-900 dark:text-slate-100">
+                      {(currentPage - 1) * itemsPerPage + 1}
+                    </span> to{" "}
+                    <span className="font-semibold text-slate-900 dark:text-slate-100">
+                      {Math.min(currentPage * itemsPerPage, sorted.length)}
+                    </span> of{" "}
+                    <span className="font-semibold text-slate-900 dark:text-slate-100">
+                      {sorted.length}
+                    </span> results
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                    className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Previous
+                  </button>
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      let pageNum;
+                      if (totalPages <= 5) {
+                        pageNum = i + 1;
+                      } else if (currentPage <= 3) {
+                        pageNum = i + 1;
+                      } else if (currentPage >= totalPages - 2) {
+                        pageNum = totalPages - 4 + i;
+                      } else {
+                        pageNum = currentPage - 2 + i;
+                      }
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => setCurrentPage(pageNum)}
+                          className={`min-w-[2rem] rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+                            currentPage === pageNum
+                              ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
+                              : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <button
+                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                    className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                  >
+                    Next
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
         </div>

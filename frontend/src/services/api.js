@@ -10,12 +10,11 @@ export const apiClient = axios.create({
 });
 
 export async function classifyMessage(residentId, messageText, options = {}) {
-  // Make API call with optional abort signal
   const { data } = await apiClient.post("/api/v1/classify", {
     resident_id: residentId,
     message_text: messageText,
   }, {
-    signal: options.signal, // Axios supports AbortController
+    signal: options.signal,
   });
   
   return data;
@@ -63,6 +62,31 @@ export async function resolveRequest(requestId, resolvedBy, resolutionNotes = nu
   if (resolutionNotes) payload.resolution_notes = resolutionNotes;
   
   const { data } = await apiClient.post("/api/v1/resolve-request", payload);
+  return data;
+}
+
+export async function updateRequestStatus(requestId, status, adminApiKey) {
+  const { data } = await apiClient.post("/api/v1/admin/update-status", {
+    request_id: requestId,
+    status: status,
+  }, {
+    headers: {
+      "X-API-Key": adminApiKey,
+    },
+  });
+  return data;
+}
+
+export async function addComment(requestId, comment, adminApiKey) {
+  const { data } = await apiClient.post("/api/v1/admin/add-comment", {
+    request_id: requestId,
+    comment: comment,
+    added_by: "admin",
+  }, {
+    headers: {
+      "X-API-Key": adminApiKey,
+    },
+  });
   return data;
 }
 
