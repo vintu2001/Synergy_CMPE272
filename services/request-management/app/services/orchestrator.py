@@ -379,8 +379,9 @@ async def submit_request(request: MessageRequest):
                 )
                 decision_response.raise_for_status()
                 decision_data = decision_response.json()
-                recommended_option_id = decision_data.get("chosen_option_id")
-                logger.info(f"AI recommended option: {recommended_option_id}")
+                # Use recommended_option_id if provided, otherwise fall back to chosen_option_id
+                recommended_option_id = decision_data.get("recommended_option_id") or decision_data.get("chosen_option_id")
+                logger.info(f"AI recommended option: {recommended_option_id} (recurring: {is_recurring})")
         except Exception as decision_error:
             logger.warning(f"Decision recommendation failed (non-critical): {decision_error}")
         

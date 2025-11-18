@@ -521,7 +521,8 @@ async def make_decision(
             policy_scores=reasoning.policy_scores,
             escalation_reason=None,
             rule_sources=rule_sources if rule_sources else None,  # Include RAG sources
-            rule_object=None
+            rule_object=None,
+            recommended_option_id=recommended_option_id
         )
         
         return DecisionResponseWithStatus(

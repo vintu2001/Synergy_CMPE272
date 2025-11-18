@@ -116,6 +116,7 @@ class DecisionResponse(BaseModel):
     escalation_reason: Optional[str] = None
     rule_sources: Optional[List[str]] = None
     rule_object: Optional[Dict[str, Any]] = None
+    recommended_option_id: Optional[str] = None
 
 
 class DecisionResponseWithStatus(BaseModel):
