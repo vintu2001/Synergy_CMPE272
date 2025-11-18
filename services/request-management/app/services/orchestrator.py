@@ -154,6 +154,7 @@ async def submit_request(request: MessageRequest):
         
         # Risk Prediction
         risk_score = None
+        recurrence_prob = None
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 risk_response = await client.post(
@@ -169,7 +170,9 @@ async def submit_request(request: MessageRequest):
                 risk_response.raise_for_status()
                 risk_data = risk_response.json()
                 risk_score = risk_data.get("risk_forecast")
-                logger.info(f"Risk prediction successful: {risk_score:.4f}")
+                recurrence_prob = risk_data.get("recurrence_probability")
+                rec_str = f"{recurrence_prob:.4f}" if recurrence_prob is not None else "N/A"
+                logger.info(f"Risk prediction successful: risk={risk_score:.4f}, recurrence={rec_str}")
         except Exception as risk_error:
             logger.warning(f"Risk prediction failed (non-critical): {risk_error}")
         
@@ -293,6 +296,7 @@ async def submit_request(request: MessageRequest):
                 },
                 "risk_assessment": {
                     "risk_forecast": risk_score,
+                    "recurrence_probability": recurrence_prob,
                     "risk_level": "High" if risk_score and risk_score > 0.7 else "Medium" if risk_score and risk_score > 0.3 else "Low" if risk_score else "Unknown"
                 } if risk_score is not None else None,
                 "action_required": "Please escalate this request to a human administrator using the 'Escalate to Human' option."
@@ -410,6 +414,7 @@ async def submit_request(request: MessageRequest):
             },
             "risk_assessment": {
                 "risk_forecast": risk_score,
+                "recurrence_probability": recurrence_prob,
                 "risk_level": "High" if risk_score and risk_score > 0.7 else "Medium" if risk_score and risk_score > 0.3 else "Low" if risk_score else "Unknown"
             } if risk_score is not None else None,
             "simulation": {

@@ -50,7 +50,8 @@ def ensure_log_stream():
         
         return True
     except Exception as e:
-        logger.error(f"Failed to ensure log stream: {e}")
+        # Silently fail if credentials not available (e.g., on Railway)
+        logger.debug(f"Failed to ensure log stream: {e}")
         return False
 
 
@@ -93,7 +94,8 @@ def log_to_cloudwatch(event_type: str, data: Dict[str, Any]):
         sequence_token = e.response['Error']['Message'].split('is: ')[-1]
         log_to_cloudwatch(event_type, data)
     except Exception as e:
-        logger.error(f"CloudWatch logging failed: {e}")
+        # Silently fail on missing credentials (e.g., Railway deployment)
+        logger.debug(f"CloudWatch logging failed: {e}")
 
 
 def setup_cloudwatch_logging():

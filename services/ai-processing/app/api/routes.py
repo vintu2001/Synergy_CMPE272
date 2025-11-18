@@ -33,9 +33,9 @@ async def predict_risk_endpoint(classification: ClassificationResponse) -> RiskP
     log_to_cloudwatch('risk_prediction_completed', {
         'category': classification.category.value,
         'urgency': classification.urgency.value,
-        'risk_score': round(result.risk_score, 3),
+        'risk_forecast': round(result.risk_forecast, 3),
         'recurrence_probability': round(result.recurrence_probability, 3) if result.recurrence_probability else None,
-        'risk_level': 'high' if result.risk_score > 0.7 else 'medium' if result.risk_score > 0.4 else 'low'
+        'risk_level': 'high' if result.risk_forecast > 0.7 else 'medium' if result.risk_forecast > 0.4 else 'low'
     })
     
     return result
