@@ -440,24 +440,14 @@ async def make_decision(
             for opt in request.simulation.options
         ]
         
-        # RECURRING ISSUE HANDLING: If this is a recurring issue, boost permanent solutions and escalation
+        # RECURRING ISSUE HANDLING: If this is a recurring issue, recommend escalate_to_human
         if request.simulation.is_recurring:
-            logger.info(f"Recurring issue detected. Boosting permanent solution and escalation options.")
+            logger.info(f"Recurring issue detected. Will recommend escalate_to_human option.")
             adjusted_scored_options = []
             for opt, score in scored_options:
-                # Check if this is the escalation option for recurring issues
-                is_escalation_option = opt.option_id == "escalate_to_admin_recurring"
-                
-                # Check if this option is marked as permanent solution
                 is_permanent = getattr(opt, 'is_permanent_solution', False)
                 
-                if is_escalation_option:
-                    # Strongly boost escalation option for recurring issues (+25%)
-                    boosted_score = min(score * 1.25, 1.0)
-                    logger.info(f"Option {opt.option_id} ({opt.action}): escalation option, boosting score from {score:.3f} to {boosted_score:.3f}")
-                    adjusted_scored_options.append((opt, boosted_score))
-                elif is_permanent:
-                    # Boost permanent solutions by 15% for recurring issues
+                if is_permanent:
                     boosted_score = min(score * 1.15, 1.0)
                     logger.info(f"Option {opt.option_id} ({opt.action}): permanent solution, boosting score from {score:.3f} to {boosted_score:.3f}")
                     adjusted_scored_options.append((opt, boosted_score))
@@ -471,6 +461,13 @@ async def make_decision(
         # Select best option
         best_option = max(scored_options, key=lambda x: x[1])
         option, score = best_option
+        
+        # For recurring issues, override to recommend escalate_to_human
+        if request.simulation.is_recurring:
+            recommended_option_id = "escalate_to_human"
+            logger.info(f"Recurring issue: Recommending escalate_to_human option (best option was {option.option_id} with score {score:.3f})")
+        else:
+            recommended_option_id = option.option_id
         
         # Generate enhanced reasoning
         reasoning = generate_decision_reasoning(

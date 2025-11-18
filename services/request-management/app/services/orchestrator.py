@@ -323,6 +323,20 @@ async def submit_request(request: MessageRequest):
         if not success:
             raise HTTPException(status_code=500, detail="Failed to save request to database")
         
+        # Store is_recurring_issue flag in the request
+        if is_recurring:
+            try:
+                table = get_table()
+                table.update_item(
+                    Key={'request_id': request_id},
+                    UpdateExpression='SET is_recurring_issue = :recurring',
+                    ExpressionAttributeValues={
+                        ':recurring': True
+                    }
+                )
+            except Exception as e:
+                logger.warning(f"Failed to update is_recurring_issue flag: {e}")
+        
         if sqs and SQS_URL:
             try:
                 payload = {
@@ -421,7 +435,8 @@ async def submit_request(request: MessageRequest):
                 "options_generated": len(simulated_options),
                 "options": simulated_options,
                 "recommended_option_id": recommended_option_id,
-                "is_recurring": is_recurring
+                "is_recurring": is_recurring,
+                "occurrence_count": simulation_data.get("occurrence_count")
             }
         }
         
@@ -452,8 +467,10 @@ async def select_option(selection: SelectOptionRequest):
             raise HTTPException(status_code=404, detail="Request not found")
         
         # Special handling for human escalation
-        if selection.selected_option_id == "escalate_to_human" or selection.selected_option_id == "escalate_to_admin_recurring":
-            escalation_type = "recurring_issue" if selection.selected_option_id == "escalate_to_admin_recurring" else "manual"
+        if selection.selected_option_id == "escalate_to_human":
+            # Check if this is a recurring issue
+            is_recurring_issue = request.get('is_recurring_issue', False)
+            escalation_type = "recurring_issue" if is_recurring_issue else "manual"
             log_to_cloudwatch('request_escalated', {
                 'request_id': selection.request_id,
                 'escalation_type': escalation_type,
@@ -502,17 +519,12 @@ async def select_option(selection: SelectOptionRequest):
         
         # Check if this is a recurring issue and user chose non-escalation option
         # We need to check if the request was marked as recurring
-        # Since is_recurring is in simulation response, we'll check if escalate_to_admin_recurring was in options
-        is_recurring_issue = False
+        # Check if this is a recurring issue
+        is_recurring_issue = request.get('is_recurring_issue', False) or is_recurring
         recurring_issue_non_escalated = False
         
-        # Check if escalate_to_admin_recurring option exists in simulated_options (indicates recurring issue)
-        has_recurring_escalation_option = any(
-            opt.get('option_id') == 'escalate_to_admin_recurring' 
-            for opt in simulated_options
-        )
-        
-        if has_recurring_escalation_option and selection.selected_option_id != "escalate_to_admin_recurring":
+        # If it's a recurring issue and user chose a non-escalation option
+        if is_recurring_issue and selection.selected_option_id != "escalate_to_human":
             is_recurring_issue = True
             recurring_issue_non_escalated = True
             logger.warning(

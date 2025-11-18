@@ -264,26 +264,17 @@ class AgenticResolutionSimulator:
                 options.append(escalation_option)
                 logger.info(f"Added human escalation option due to missing RAG context (total options: {len(options)})")
             
+            occurrence_count = None
             if is_recurring:
                 occurrence_count = tools_data.get('recurring', {}).get('occurrence_count', 2)
-                escalation_option = SimulatedOption(
-                    option_id="escalate_to_admin_recurring",
-                    action=f"Escalate to Admin - This issue has occurred {occurrence_count} time(s). We recommend escalating to an administrator to find a permanent fix and prevent future occurrences.",
-                    estimated_cost=0.0,
-                    estimated_time=24.0,
-                    reasoning=f"Recurring issue detected ({occurrence_count} occurrence(s)). Admin review recommended to identify root cause and implement permanent solution.",
-                    source_doc_ids=None,
-                    resident_satisfaction_impact=0.90,
-                    is_permanent_solution=True
-                )
-                options.insert(0, escalation_option)
-                logger.info(f"Added admin escalation option for recurring issue (occurrence_count={occurrence_count}, total options: {len(options)})")
+                logger.info(f"Recurring issue detected (occurrence_count={occurrence_count}). Escalate to human option should be recommended.")
             
             logger.info(f"Successfully generated {len(options)} agentic options with {len(source_doc_ids)} RAG sources (is_recurring={is_recurring}, rag_fallback={rag_fallback_needed})")
             
             return {
                 'options': options,
-                'is_recurring': is_recurring
+                'is_recurring': is_recurring,
+                'occurrence_count': occurrence_count
             }
         
         except HTTPException:
