@@ -60,3 +60,13 @@ frontend/.vite/
 *.tmp
 *.bak
 .cache/
+
+# Coverage reports
+coverage_html/
+e2e_coverage_html/
+.coverage
+htmlcov/
+*.coverage
+coverage.json
+e2e_coverage.json
+.pytest_cache/
