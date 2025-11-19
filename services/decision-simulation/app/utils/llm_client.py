@@ -388,6 +388,7 @@ TASK:
 1. Check if recurring: Set is_recurring=true if resident has 2+ similar past issues OR message contains "again/still/keep happening"
 2. Generate 3 options: Premium (fast/costly), Balanced (moderate), Budget (slow/cheap)
 3. If is_recurring=true, include 1+ permanent solution option (is_permanent_solution=true)
+4. CRITICAL: For each option, provide 3-5 specific action steps in the "steps" array showing exactly how this solution will be executed
 
 REQUIREMENTS:
 - Be specific to "{message_text}" not generic
@@ -395,6 +396,7 @@ REQUIREMENTS:
 - Times in hours (decimals OK)
 - Satisfaction 0.0-1.0
 - Keep all text brief and on single lines
+- STEPS MUST BE INCLUDED - never leave steps null or empty
 
 JSON FORMAT (CRITICAL):
 - Return ONLY valid JSON with no markdown or code blocks
@@ -402,6 +404,7 @@ JSON FORMAT (CRITICAL):
 - No newlines in strings - use spaces
 - No unescaped quotes or special chars
 - Ensure all brackets/braces closed
+- STEPS FIELD IS MANDATORY - provide 3-5 concrete action steps for each option
 
 {{
   "reasoning": "Brief analysis on one line",
@@ -414,6 +417,7 @@ JSON FORMAT (CRITICAL):
       "time_to_resolution": 4.0,
       "resident_satisfaction_impact": 0.85,
       "reasoning": "Why this option works",
+      "steps": ["Contact vendor and schedule", "Dispatch technician within 2 hours", "Complete repair and test", "Follow up with resident"],
       "is_permanent_solution": false,
       "requires_resident_action": false
     }},
@@ -424,6 +428,7 @@ JSON FORMAT (CRITICAL):
       "time_to_resolution": 8.0,
       "resident_satisfaction_impact": 0.75,
       "reasoning": "Why this option works",
+      "steps": ["Schedule technician for next available slot", "Diagnose issue", "Order any needed parts", "Complete repair within 8 hours"],
       "is_permanent_solution": false,
       "requires_resident_action": false
     }},
@@ -434,6 +439,7 @@ JSON FORMAT (CRITICAL):
       "time_to_resolution": 12.0,
       "resident_satisfaction_impact": 0.65,
       "reasoning": "Why this option works",
+      "steps": ["Resident picks up temporary solution from office", "Schedule repair for tomorrow", "Technician completes work", "Return temporary equipment"],
       "is_permanent_solution": false,
       "requires_resident_action": true
     }}

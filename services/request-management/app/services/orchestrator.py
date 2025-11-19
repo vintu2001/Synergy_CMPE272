@@ -521,7 +521,7 @@ async def select_option(selection: SelectOptionRequest):
         # Check if this is a recurring issue and user chose non-escalation option
         # We need to check if the request was marked as recurring
         # Check if this is a recurring issue
-        is_recurring_issue = request.get('is_recurring_issue', False) or is_recurring
+        is_recurring_issue = request.get('is_recurring_issue', False)
         recurring_issue_non_escalated = False
         
         # If it's a recurring issue and user chose a non-escalation option
