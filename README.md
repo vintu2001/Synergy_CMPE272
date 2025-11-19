@@ -1,4 +1,4 @@
-# Agentic Apartment Manager
+# SAM (Synergy Apartment Manager)
 
 ## Group Information
 **Group Name: Synergy**
@@ -12,76 +12,72 @@
 ---
 
 ## Project Summary
-The **Agentic Apartment Manager (AAM)** is an autonomous, AI-driven system that functions as a proactive digital property manager for apartment complexes. It receives resident messages, predicts potential problems, simulates solutions, and autonomously executes actions with explainability and observability built in.
-
----
-
-## System Architecture
-The Agentic Apartment Manager is built as a distributed, event-driven system on AWS Cloud, where containerized FastAPI microservices communicate asynchronously through Kafka or Kinesis to process resident messages and management events in real time. A LangChain-powered LLM interprets natural language inputs, and predictive models using XGBoost and ARIMA assess risk and recurrence probabilities. These outputs feed a reasoning engine built with CrewAI and SimPy, which simulates outcomes and autonomously triggers actions via AWS Lambda APIs. Data is stored in DynamoDB and PostgreSQL, monitored through Instana, CloudWatch, and Grafana. The result is a cohesive, self-learning architecture that continuously perceives, reasons, and acts to manage apartment operations predictively and autonomously.
+**SAM** is an autonomous, AI-driven system that functions as a proactive digital property manager for apartment complexes. It receives resident messages, predicts potential problems, simulates solutions, and autonomously executes actions with explainability and observability built in.
 
 ---
 
 ## Features
 
-### 🤖 Agentic Intelligence
+### Agentic Intelligence
 - **Multi-Agent System**: Coordinated agents for classification, simulation, and decision-making
 - **Autonomous Actions**: Self-directed problem resolution with policy compliance
 - **Learning Engine**: Continuous improvement from historical decisions
 
-### 🧠 RAG-Enhanced Decision Making
+### RAG-Enhanced Decision Making
 - **Knowledge Base Integration**: 35+ policy documents, SOPs, vendor catalogs, and SLAs
 - **Context-Aware Retrieval**: Building-specific and global document filtering
 - **Policy Compliance**: Decisions grounded in actual building policies and regulations
 - **Citation Tracking**: Full traceability of knowledge sources used in decisions
 - **Vector Search**: ChromaDB-powered semantic search with <100ms latency
 
-### 📊 Predictive Analytics
+### Predictive Analytics
 - **Risk Prediction**: XGBoost-based urgency classification
 - **Pattern Detection**: ARIMA forecasting for recurring issues
 - **Proactive Maintenance**: Identify problems before they escalate
 
-### 🔍 Decision Logging
+### Decision Logging
 - **Audit Trail**: Complete decision history in DynamoDB
 - **Rule Transparency**: Structured rule objects with policy citations
 
 ---
 
-## Project Structure
+## System Architecture
 
-```
-Synergy_CMPE272/
-├── services/                 # Microservices
-│   ├── request-management/  # Request Management Service
-│   │   ├── app/
-│   │   ├── Dockerfile
-│   │   └── requirements.txt
-│   ├── ai-processing/       # AI Processing Service
-│   │   ├── app/
-│   │   ├── Dockerfile
-│   │   └── requirements.txt
-│   ├── decision-simulation/ # Decision & Simulation Service
-│   │   ├── app/
-│   │   ├── Dockerfile
-│   │   └── requirements.txt
-│   └── execution/           # Execution Service
-│       ├── app/
-│       ├── Dockerfile
-│       └── requirements.txt
-│
-├── frontend/                # Frontend application
-│   ├── src/
-│   └── package.json
-│
-├── ml/                      # Machine learning components
-│   ├── scripts/             # Python scripts
-│   ├── notebooks/           # Jupyter notebooks
-│   ├── data/                # Synthetic datasets
-│   └── models/              # Trained models
-│
-└── infrastructure/          # Infrastructure as code
-    ├── docker/              # Docker compose for local testing
-    │   └── docker-compose.microservices.yml
-```
+### Microservices Architecture
+The Agentic Apartment Manager is built as a **distributed microservices architecture** with containerized FastAPI services communicating via **synchronous HTTP/REST APIs**.
+
+### Core Services
+- **Request Management Service**
+  - Acts as API gateway and orchestrator
+  - Makes sequential HTTP calls to downstream services
+  - Manages request lifecycle and DynamoDB persistence
+  
+- **AI Processing Service**
+  - Message classification using Google Gemini
+  - XGBoost-based urgency prediction
+  - Risk assessment and intent detection
+  
+- **Decision & Simulation Service**
+  - RAG-based knowledge retrieval from ChromaDB (35+ policy documents)
+  - LLM-powered option generation via Google Gemini
+  - Policy-compliant decision scoring with weight normalization
+  - ChromaDB vector store for semantic search
+  
+- **Execution Service**
+  - External action execution
+  - Notification delivery
+  - Third-party integration handling
+
+### Frontend
+- **React + Vite Application**
+  - Resident request submission interface
+  - Real-time classification feedback
+  - Option selection and decision visualization
+  - Admin dashboard for request monitoring
+
+### Data & Storage
+- **DynamoDB**: Request tracking, audit trails, and decision logging
+- **ChromaDB**: Vector embeddings for RAG-based knowledge retrieval
 
 ---
 
@@ -118,7 +114,7 @@ Synergy_CMPE272/
 
 ---
 
-## 🧪 Local Testing (End-to-End from UI)
+## Local Testing (End-to-End from UI)
 
 Complete guide to test all microservices locally with the frontend.
 
