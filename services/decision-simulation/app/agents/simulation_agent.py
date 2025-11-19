@@ -83,16 +83,18 @@ class AgenticResolutionSimulator:
             
             tools_data['learning_insights'] = learning_insights
             
-            complexity_analysis = await self.multi_step_reasoner.analyze_complexity(
-                message_text=message_text,
-                category=category.value,
-                urgency=urgency.value,
-                tools_data=tools_data
-            )
+            # PERFORMANCE OPTIMIZATION: Disable complexity analysis (was failing with JSON parse errors and adding 2s latency)
+            # The complexity analysis LLM call was returning invalid JSON and failing frequently.
+            # For now, we skip it and go straight to option generation which is more reliable.
+            complexity_analysis = {
+                'is_complex': False,
+                'complexity_score': 0.0,
+                'reasoning_required': 'single_step'
+            }
+            logger.info(f"Complexity analysis: SKIPPED (using single_step mode for performance)")
             
-            logger.info(f"Complexity analysis: {complexity_analysis.get('reasoning_required', 'single_step')} (score: {complexity_analysis.get('complexity_score', 0):.2f})")
-            
-            if complexity_analysis.get('is_complex') and complexity_analysis.get('complexity_score', 0) > 0.7:
+            # Legacy multi-step reasoning path (disabled for performance)
+            if False and complexity_analysis.get('is_complex') and complexity_analysis.get('complexity_score', 0) > 0.7:
                 logger.info("Using multi-step reasoning for complex issue")
                 
                 reasoning_chain = await self.multi_step_reasoner.generate_reasoning_chain(
@@ -147,7 +149,7 @@ class AgenticResolutionSimulator:
                         query=message_text,
                         category=category.value,
                         building_id=building_id,
-                        top_k=int(os.getenv('RAG_TOP_K', '5')),
+                        top_k=3,  # Reduced from 5 to 3 for performance (only top 3 used anyway)
                         similarity_threshold=0.4
                     )
                     
@@ -157,7 +159,7 @@ class AgenticResolutionSimulator:
                             query=message_text,
                             category=category.value,
                             building_id=building_id,
-                            top_k=int(os.getenv('RAG_TOP_K', '5')) * 2,
+                            top_k=5,  # Retrieve 5 docs on retry for better coverage
                             similarity_threshold=0.3
                         )
                     
@@ -216,7 +218,10 @@ class AgenticResolutionSimulator:
                 rag_fallback_needed = True
             
             options = []
-            for llm_option in llm_response['options']:
+            for idx, llm_option in enumerate(llm_response['options'], 1):
+                # Generate option_id programmatically (LLM doesn't need to provide it)
+                option_id = f"opt_{idx}"
+                
                 # Create simple details for UI dropdown (single-step breakdown)
                 simple_details = [{
                     'step': 1,
@@ -229,7 +234,7 @@ class AgenticResolutionSimulator:
                 # Get satisfaction from LLM response
                 llm_satisfaction = llm_option.get('resident_satisfaction_impact')
                 if llm_satisfaction is None:
-                    logger.warning(f"LLM did not provide resident_satisfaction_impact for {llm_option['option_id']}. Raw option: {llm_option}")
+                    logger.warning(f"LLM did not provide resident_satisfaction_impact for option {idx}. Raw option: {llm_option}")
                     llm_satisfaction = 0.75  # Fallback only if LLM doesn't provide it
                 
                 # Get steps from LLM response
@@ -240,7 +245,7 @@ class AgenticResolutionSimulator:
                     steps = None
                 
                 option = SimulatedOption(
-                    option_id=llm_option['option_id'],
+                    option_id=option_id,  # Programmatically assigned
                     action=llm_option['action'],
                     estimated_cost=float(llm_option['estimated_cost']),
                     estimated_time=float(llm_option.get('time_to_resolution', llm_option.get('estimated_time', 1.0))),
