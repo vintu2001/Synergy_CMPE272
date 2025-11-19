@@ -57,8 +57,6 @@ class SimulatedOption(BaseModel):
     source_doc_ids: Optional[List[str]] = None
     resident_satisfaction_impact: Optional[float] = Field(None, ge=0.0, le=1.0)
     steps: Optional[List[str]] = None
-    is_permanent_solution: Optional[bool] = False
-    requires_resident_action: Optional[bool] = False
     model_config = {"exclude_none": False}
 
 
@@ -69,10 +67,10 @@ class SimulationResponse(BaseModel):
 
 
 class PolicyWeights(BaseModel):
-    urgency_weight: float = Field(0.4, ge=0.0, le=1.0)
-    cost_weight: float = Field(0.3, ge=0.0, le=1.0)
-    time_weight: float = Field(0.2, ge=0.0, le=1.0)
-    satisfaction_weight: float = Field(0.1, ge=0.0, le=1.0)
+    urgency_weight: float = Field(0.3, ge=0.0, le=1.0)
+    cost_weight: float = Field(0.20, ge=0.0, le=1.0)
+    time_weight: float = Field(0.25, ge=0.0, le=1.0)
+    satisfaction_weight: float = Field(0.15, ge=0.0, le=1.0)
 
 
 class PolicyConfiguration(BaseModel):

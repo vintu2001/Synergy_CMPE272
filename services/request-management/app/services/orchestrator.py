@@ -198,7 +198,7 @@ async def submit_request(request: MessageRequest):
                 for req in resident_history[-5:]
             ]
             
-            async with httpx.AsyncClient(timeout=60.0) as client:
+            async with httpx.AsyncClient(timeout=120.0) as client:  # Increased from 60s to 120s
                 simulate_response = await client.post(
                     f"{DECISION_SIMULATION_URL}/api/v1/simulate",
                     json={
@@ -240,6 +240,10 @@ async def submit_request(request: MessageRequest):
             llm_generation_failed = True
             llm_error_message = 'We encountered an unexpected error while analyzing your request. Please escalate this issue to a human administrator.'
             logger.error(f"Simulation failed: {sim_error}")
+            logger.error(f"Simulation error type: {type(sim_error).__name__}")
+            logger.error(f"Simulation error details: {str(sim_error)}")
+            import traceback
+            logger.error(f"Simulation traceback: {traceback.format_exc()}")
         
         # If LLM generation failed, still create request in database for escalation
         if llm_generation_failed:

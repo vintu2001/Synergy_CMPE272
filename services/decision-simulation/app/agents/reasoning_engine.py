@@ -174,9 +174,7 @@ Keep it concise."""
                 'resident_satisfaction_impact': 0.90,
                 'reasoning': f"Most thorough solution with {len(steps)} coordinated steps for permanent fix",
                 'details': self._format_detailed_phases(steps),  # For UI dropdown
-                'phases': steps,
-                'is_permanent_solution': True,
-                'requires_resident_action': False
+                'phases': steps
             }
             
             # Option 2: Expedited (skip non-critical steps)
@@ -192,9 +190,7 @@ Keep it concise."""
                 'resident_satisfaction_impact': 0.80,
                 'reasoning': f"Faster resolution focusing on essential repairs first",
                 'details': self._format_detailed_phases(critical_steps if critical_steps else steps),  # For UI dropdown
-                'phases': critical_steps,
-                'is_permanent_solution': True,
-                'requires_resident_action': False
+                'phases': critical_steps
             }
             
             # Option 3: Emergency immediate action + follow-up
@@ -229,9 +225,7 @@ Keep it concise."""
                 'reasoning': "Quickest response to handle immediate safety concerns",
                 'details': emergency_details,  # For UI dropdown
                 'phases': [first_step] if first_step else [],
-                'follow_up_required': True,
-                'is_permanent_solution': False,
-                'requires_resident_action': False
+                'follow_up_required': True
             }
             
             return [option_1, option_2, option_3]

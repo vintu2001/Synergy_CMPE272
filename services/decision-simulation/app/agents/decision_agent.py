@@ -26,6 +26,57 @@ DEFAULT_CONFIG = PolicyConfiguration()
 router = APIRouter()
 
 
+def normalize_weights(weights: PolicyWeights) -> PolicyWeights:
+    """Ensure weights sum to 1.0 for consistent scoring."""
+    total = (
+        weights.urgency_weight + 
+        weights.cost_weight + 
+        weights.time_weight + 
+        weights.satisfaction_weight
+    )
+    
+    # If total is 0 or invalid, return default weights
+    if total <= 0:
+        logger.warning("Invalid weights (sum <= 0), using defaults")
+        return DEFAULT_WEIGHTS
+    
+    # If already normalized (sum = 1.0 ± 0.001), return as-is
+    if abs(total - 1.0) < 0.001:
+        return weights
+    
+    # Normalize to sum to 1.0
+    logger.info(f"Normalizing weights: original sum = {total:.3f}")
+    return PolicyWeights(
+        urgency_weight=weights.urgency_weight / total,
+        cost_weight=weights.cost_weight / total,
+        time_weight=weights.time_weight / total,
+        satisfaction_weight=weights.satisfaction_weight / total
+    )
+
+
+def select_best_option(scored_options: List[Tuple[SimulatedOption, float]]) -> Tuple[SimulatedOption, float]:
+    """Select best option with tiebreaker for equal scores."""
+    if not scored_options:
+        raise ValueError("No options to select from")
+    
+    # Find max score
+    max_score = max(score for _, score in scored_options)
+    
+    # Get all options with max score
+    top_options = [(opt, score) for opt, score in scored_options if abs(score - max_score) < 0.0001]
+    
+    # If only one option has max score, return it
+    if len(top_options) == 1:
+        return top_options[0]
+    
+    # Tiebreaker: prefer lowest cost, then lowest time
+    logger.info(f"Tiebreaker needed: {len(top_options)} options with score {max_score:.3f}")
+    best = min(top_options, key=lambda x: (x[0].estimated_cost, x[0].estimated_time))
+    logger.info(f"Tiebreaker selected: {best[0].option_id} (cost: ${best[0].estimated_cost:.2f}, time: {best[0].estimated_time:.1f}h)")
+    
+    return best
+
+
 def create_escalation_decision(
     classification: ClassificationResponse,
     reason: str = "Resident explicitly requested human contact",
@@ -109,7 +160,9 @@ def calculate_raw_score(
     # Calculate scores using scaled values
     cost_score = 1.0 - (scaled_cost / config.max_cost)
     time_score = 1.0 - (scaled_time / config.max_time)
-    satisfaction_score = 0.7  # Default satisfaction score since field removed
+    
+    # Use LLM-generated satisfaction score if available, otherwise default to 0.7
+    satisfaction_score = option.resident_satisfaction_impact if option.resident_satisfaction_impact is not None else 0.7
 
     # Calculate raw weighted score without capping
     raw_score = (
@@ -145,11 +198,14 @@ def generate_factor_breakdown(
     scaled_time = option.estimated_time * time_scaling_factor
     time_score = 1.0 - (scaled_time / config.max_time)
     
+    # Use LLM-generated satisfaction score if available, otherwise default to 0.7
+    satisfaction_score = option.resident_satisfaction_impact if option.resident_satisfaction_impact is not None else 0.7
+    
     return {
         "urgency_contribution": weights.urgency_weight * urgency_factor,
         "cost_contribution": weights.cost_weight * cost_score,
         "time_contribution": weights.time_weight * time_score,
-        "satisfaction_contribution": weights.satisfaction_weight * 0.7  # Default satisfaction
+        "satisfaction_contribution": weights.satisfaction_weight * satisfaction_score
     }
 
 def generate_comparative_analysis(
@@ -230,17 +286,6 @@ def generate_decision_reasoning(
     considerations.append(f"Decision Factor Analysis for {option.action}:")
     for factor, contribution in factor_breakdown.items():
         considerations.append(f"- {factor.replace('_', ' ').title()}: {contribution:.2f}")
-    
-    # Add recurring issue information if applicable
-    if is_recurring:
-        is_permanent = getattr(option, 'is_permanent_solution', False)
-        if is_permanent:
-            considerations.append("\nRecurring Issue Handling:")
-            considerations.append("- This is a recurring issue; permanent solution selected")
-            considerations.append("- Permanent solutions receive priority for recurring problems")
-        else:
-            considerations.append("\nRecurring Issue Handling:")
-            considerations.append("- This is a recurring issue; temporary solution selected as best balance")
     
     # Add comparative insights
     considerations.extend([f"Comparative Analysis:", *[f"- {insight}" for insight in comparative_insights]])
@@ -411,6 +456,9 @@ async def make_decision(
                 detail="No options provided in simulation"
             )
         
+        # Normalize weights to ensure they sum to 1.0
+        normalized_weights = normalize_weights(request.weights)
+        
         max_actual_cost = max((opt.estimated_cost for opt in request.simulation.options), default=1.0)
         max_actual_time = max((opt.estimated_time for opt in request.simulation.options), default=1.0)
 
@@ -420,7 +468,7 @@ async def make_decision(
                 request.classification.urgency.value,
                 max_actual_cost,
                 max_actual_time,
-                request.weights,
+                normalized_weights,
                 request.config
             )
             for opt in request.simulation.options
@@ -434,7 +482,7 @@ async def make_decision(
                 request.classification.urgency.value,
                 max_actual_cost,
                 max_actual_time,
-                request.weights,
+                normalized_weights,
                 request.config
             )/max_raw_score) 
             for opt in request.simulation.options
@@ -443,23 +491,12 @@ async def make_decision(
         # RECURRING ISSUE HANDLING: If this is a recurring issue, recommend escalate_to_human
         if request.simulation.is_recurring:
             logger.info(f"Recurring issue detected. Will recommend escalate_to_human option.")
-            adjusted_scored_options = []
-            for opt, score in scored_options:
-                is_permanent = getattr(opt, 'is_permanent_solution', False)
-                
-                if is_permanent:
-                    boosted_score = min(score * 1.15, 1.0)
-                    logger.info(f"Option {opt.option_id} ({opt.action}): permanent solution, boosting score from {score:.3f} to {boosted_score:.3f}")
-                    adjusted_scored_options.append((opt, boosted_score))
-                else:
-                    adjusted_score = max(score * 0.95, 0.0)
-                    logger.info(f"Option {opt.option_id} ({opt.action}): temporary solution, adjusted score from {score:.3f} to {adjusted_score:.3f}")
-                    adjusted_scored_options.append((opt, adjusted_score))
-            
-            scored_options = adjusted_scored_options
+        # RECURRING ISSUE HANDLING: Simplified without permanent solution boosting
+        if request.simulation.is_recurring:
+            logger.info(f"Recurring issue detected. Using standard scoring to select best option.")
         
-        # Select best option
-        best_option = max(scored_options, key=lambda x: x[1])
+        # Select best option with tiebreaker logic
+        best_option = select_best_option(scored_options)
         option, score = best_option
         
         # For recurring issues, override to recommend escalate_to_human
@@ -469,13 +506,13 @@ async def make_decision(
         else:
             recommended_option_id = option.option_id
         
-        # Generate enhanced reasoning
+        # Generate enhanced reasoning (use normalized weights)
         reasoning = generate_decision_reasoning(
             best_option,
             scored_options,
             request.simulation.options,
             request.classification,
-            request.weights,
+            normalized_weights,
             request.config,
             is_recurring=request.simulation.is_recurring
         )

@@ -127,16 +127,69 @@ class LLMClient:
                 resident_history, tools_data, rag_context
             )
             
-            response = self.model.generate_content(
-                prompt,
-                generation_config=genai.GenerationConfig(
-                    temperature=0.1,  # Very low temperature for consistent JSON formatting
-                    max_output_tokens=4096,
-                    top_p=0.95,  # Reduce randomness
-                    top_k=40,  # Further constrain token selection
-                    response_mime_type="application/json"  # Request JSON response format
-                )
-            )
+            # Retry logic for transient API failures
+            max_retries = 2
+            last_error = None
+            
+            for attempt in range(max_retries):
+                try:
+                    from google.generativeai.types import HarmCategory, HarmBlockThreshold
+                    
+                    response = self.model.generate_content(
+                        prompt,
+                        generation_config=genai.GenerationConfig(
+                            temperature=0.1,  # Very low temperature for consistent JSON formatting
+                            max_output_tokens=4096,  # Balanced - sufficient for 3 options without hitting limits
+                            top_p=0.95,  # Reduce randomness
+                            top_k=40,  # Further constrain token selection
+                            response_mime_type="application/json"  # Request JSON response format
+                        ),
+                        safety_settings={
+                            HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+                            HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+                            HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+                            HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+                        }
+                    )
+                    
+                    # Log finish reason for debugging
+                    if response and response.candidates:
+                        finish_reason = response.candidates[0].finish_reason
+                        logger.info(f"LLM finish_reason: {finish_reason}")
+                        
+                        # finish_reason codes: 0=UNSPECIFIED, 1=STOP (success), 2=MAX_TOKENS, 3=SAFETY, 4=RECITATION, 5=OTHER
+                        if finish_reason == 3:  # SAFETY
+                            safety_ratings = response.candidates[0].safety_ratings
+                            logger.error(f"Content blocked by safety filters: {safety_ratings}")
+                            raise ValueError(f"SAFETY: Content blocked by Gemini safety filters")
+                        elif finish_reason == 2:  # MAX_TOKENS
+                            logger.warning("Response truncated due to max_output_tokens limit")
+                            # Continue anyway - we might have partial JSON
+                    
+                    # If successful, break out of retry loop
+                    if response and response.text:
+                        if attempt > 0:
+                            logger.info(f"LLM succeeded on retry attempt {attempt + 1}")
+                        break
+                    else:
+                        # Check if we have candidates but no text
+                        if response and response.candidates:
+                            finish_reason = response.candidates[0].finish_reason
+                            raise ValueError(f"Empty response from LLM (finish_reason={finish_reason})")
+                        else:
+                            raise ValueError("Empty response from LLM (no candidates)")
+                        
+                except Exception as e:
+                    last_error = e
+                    if attempt < max_retries - 1:
+                        # For 429 rate limit errors, wait longer before retry
+                        wait_time = 3 if "429" in str(e) or "quota" in str(e).lower() else 1
+                        logger.warning(f"LLM attempt {attempt + 1} failed: {e}. Retrying in {wait_time}s...")
+                        import time
+                        time.sleep(wait_time)
+                    else:
+                        logger.error(f"LLM failed after {max_retries} attempts")
+                        raise
             
             # Check finish reason
             if response.candidates:
@@ -195,9 +248,9 @@ class LLMClient:
             if len(options) < 2:
                 raise ValueError(f"Insufficient options generated: {len(options)} (expected at least 2)")
             
-            # Validate each option
+            # Validate each option (option_id no longer required - assigned programmatically)
             for idx, option in enumerate(options):
-                required_fields = ['option_id', 'action', 'estimated_cost', 'resident_satisfaction_impact']
+                required_fields = ['action', 'estimated_cost', 'resident_satisfaction_impact']
                 if 'estimated_time' not in option and 'time_to_resolution' not in option:
                     raise ValueError(f"Option {idx+1} missing time field (estimated_time or time_to_resolution)")
                 
@@ -297,7 +350,6 @@ CATEGORY: {category} | URGENCY: {urgency}
 {rag_section}
 
 REQUIRED FIELDS (all mandatory):
-- option_id: "opt_1", "opt_2", "opt_3"
 - action: brief description (under 150 chars)
 - estimated_cost: number (dollars)
 - time_to_resolution: number (hours)
@@ -313,9 +365,9 @@ JSON FORMAT RULES:
 
 Example:
 [
-  {{"option_id":"opt_1","action":"Fast repair","estimated_cost":300,"time_to_resolution":2,"resident_satisfaction_impact":0.85,"reasoning":"Quick fix","steps":["Step 1","Step 2","Step 3"]}},
-  {{"option_id":"opt_2","action":"Standard repair","estimated_cost":150,"time_to_resolution":24,"resident_satisfaction_impact":0.75,"reasoning":"Balanced","steps":["Step 1","Step 2","Step 3"]}},
-  {{"option_id":"opt_3","action":"Budget repair","estimated_cost":50,"time_to_resolution":48,"resident_satisfaction_impact":0.65,"reasoning":"Economical","steps":["Step 1","Step 2","Step 3"]}}
+  {{"action":"Fast repair","estimated_cost":300,"time_to_resolution":2,"resident_satisfaction_impact":0.85,"reasoning":"Quick fix","steps":["Step 1","Step 2","Step 3"]}},
+  {{"action":"Standard repair","estimated_cost":150,"time_to_resolution":24,"resident_satisfaction_impact":0.75,"reasoning":"Balanced","steps":["Step 1","Step 2","Step 3"]}},
+  {{"action":"Budget repair","estimated_cost":50,"time_to_resolution":48,"resident_satisfaction_impact":0.65,"reasoning":"Economical","steps":["Step 1","Step 2","Step 3"]}}
 ]
 
 Generate valid JSON array now."""
@@ -359,19 +411,16 @@ Generate valid JSON array now."""
             if 'past_solutions' in tools_data:
                 tools_context += f"\n- Similar Past Solutions: {tools_data['past_solutions']}"
         
-        # Build RAG context from knowledge base
+        # Build RAG context from knowledge base - OPTIMIZED
         rag_section = ""
         if rag_context and hasattr(rag_context, 'retrieved_docs') and rag_context.retrieved_docs:
-            rag_section = "\n\n=== KNOWLEDGE BASE DOCUMENTS ===\n"
-            rag_section += "The following documents were retrieved from our knowledge base based on this issue:\n\n"
-            for i, doc in enumerate(rag_context.retrieved_docs, 1):
+            rag_section = "\n\nKnowledge Base:\n"
+            # Only use top 3 most relevant docs (not 5) and truncate to 200 chars
+            for i, doc in enumerate(rag_context.retrieved_docs[:3], 1):
                 doc_id = doc.get('doc_id', 'Unknown')
-                doc_type = doc.get('type', 'document')
                 text = doc.get('text', '')
-                score = doc.get('score', 0)
-                rag_section += f"{i}. [{doc_id}] (relevance: {score:.2f}, type: {doc_type})\n"
-                rag_section += f"   {text[:300]}...\n\n"
-            rag_section += "IMPORTANT: Use these KB documents to inform your decisions. Reference doc IDs in your reasoning when applicable.\n"
+                rag_section += f"{i}. [{doc_id}] {text[:200]}...\n"
+            rag_section += "Use KB docs to inform decisions.\n"
         
         prompt = f"""You are an AI apartment management agent. Generate 3 resolution options for this issue.
 
@@ -387,8 +436,7 @@ HISTORY:
 TASK:
 1. Check if recurring: Set is_recurring=true if resident has 2+ similar past issues OR message contains "again/still/keep happening"
 2. Generate 3 options: Premium (fast/costly), Balanced (moderate), Budget (slow/cheap)
-3. If is_recurring=true, include 1+ permanent solution option (is_permanent_solution=true)
-4. CRITICAL: For each option, provide 3-5 specific action steps in the "steps" array showing exactly how this solution will be executed
+3. CRITICAL: For each option, provide 3-5 specific action steps in the "steps" array showing exactly how this solution will be executed
 
 REQUIREMENTS:
 - Be specific to "{message_text}" not generic
@@ -411,37 +459,28 @@ JSON FORMAT (CRITICAL):
   "is_recurring": false,
   "options": [
     {{
-      "option_id": "opt_1",
       "action": "Specific action 1-2 sentences",
       "estimated_cost": 250.00,
       "time_to_resolution": 4.0,
       "resident_satisfaction_impact": 0.85,
       "reasoning": "Why this option works",
-      "steps": ["Contact vendor and schedule", "Dispatch technician within 2 hours", "Complete repair and test", "Follow up with resident"],
-      "is_permanent_solution": false,
-      "requires_resident_action": false
+      "steps": ["Contact vendor and schedule", "Dispatch technician within 2 hours", "Complete repair and test", "Follow up with resident"]
     }},
     {{
-      "option_id": "opt_2",
       "action": "Different approach 1-2 sentences",
       "estimated_cost": 150.00,
       "time_to_resolution": 8.0,
       "resident_satisfaction_impact": 0.75,
       "reasoning": "Why this option works",
-      "steps": ["Schedule technician for next available slot", "Diagnose issue", "Order any needed parts", "Complete repair within 8 hours"],
-      "is_permanent_solution": false,
-      "requires_resident_action": false
+      "steps": ["Schedule technician for next available slot", "Diagnose issue", "Order any needed parts", "Complete repair within 8 hours"]
     }},
     {{
-      "option_id": "opt_3",
       "action": "Budget option 1-2 sentences",
       "estimated_cost": 80.00,
       "time_to_resolution": 12.0,
       "resident_satisfaction_impact": 0.65,
       "reasoning": "Why this option works",
-      "steps": ["Resident picks up temporary solution from office", "Schedule repair for tomorrow", "Technician completes work", "Return temporary equipment"],
-      "is_permanent_solution": false,
-      "requires_resident_action": true
+      "steps": ["Schedule repair for tomorrow", "Technician completes work", "Verify repair successful"]
     }}
   ],
   "escalation_recommended": false,
