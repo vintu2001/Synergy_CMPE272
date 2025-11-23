@@ -204,7 +204,7 @@ class LLMClient:
                 logger.error(f"Empty response from LLM. Response: {response}")
                 raise ValueError("Empty response from LLM")
             
-            logger.info(f"Raw LLM response text (first 500 chars): {response.text[:500]}")
+            logger.info(f"Raw LLM response text: {response.text}")
             
             # Try to extract JSON from response if it's wrapped in markdown code blocks
             response_text = response.text.strip()
@@ -228,7 +228,7 @@ class LLMClient:
                     logger.info("✅ JSON successfully repaired and parsed")
                 except json.JSONDecodeError as repair_err:
                     logger.error(f"JSON repair failed: {repair_err}")
-                    logger.error(f"Original text: {response_text[:500]}...")
+                    logger.error(f"Original text: {response_text}")
                     logger.error(f"Repaired text: {repaired_text[:500]}...")
                     raise repair_err  # Re-raise to trigger error handling below
             
@@ -699,6 +699,13 @@ Return ONLY the JSON object, no markdown formatting."""
         text = re.sub(r',(\s*[\}\]])', r'\1', text)
         if text != original_text:
             logger.debug("Removed trailing commas")
+            
+        # Fix missing closing brace between objects in a list
+        # Pattern: "steps": [...], { "action": ... } -> missing } before comma
+        # This catches the specific error we observed where the LLM forgets to close the option object
+        if re.search(r'\]\s*,\s*\{', text):
+            logger.debug("Detected missing closing brace between objects, attempting fix")
+            text = re.sub(r'(\]\s*),(\s*\{)', r'\1},\2', text)
         
         # Ensure proper closing brackets
         open_braces = text.count('{') - text.count('}')
