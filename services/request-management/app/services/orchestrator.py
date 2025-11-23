@@ -402,11 +402,67 @@ async def submit_request(request: MessageRequest):
                 )
             except Exception as e:
                 logger.warning(f"Failed to update recommended option: {e}")
+
+        # AUTO-EXECUTION LOGIC
+        execution_result = None
+        if recommended_option_id:
+            logger.info(f"Auto-executing recommended option: {recommended_option_id}")
+            try:
+                # Find the recommended option details
+                selected_option = next(
+                    (opt for opt in simulated_options if opt['option_id'] == recommended_option_id),
+                    None
+                )
+                
+                if selected_option:
+                    # Execute the selected option (Execution Service)
+                    category = final_category
+                    
+                    async with httpx.AsyncClient(timeout=30.0) as client:
+                        execution_response = await client.post(
+                            f"{EXECUTION_URL}/api/v1/execute",
+                            json={
+                                "chosen_action": selected_option['action'],
+                                "chosen_option_id": recommended_option_id,
+                                "reasoning": selected_option.get('reasoning', ''),
+                                "alternatives_considered": [],
+                                "category": category.value
+                            }
+                        )
+                        execution_response.raise_for_status()
+                        execution_result = execution_response.json()
+                    
+                    # Update request status to IN_PROGRESS and set user_selected_option_id (as if user selected it)
+                    table = get_table()
+                    table.update_item(
+                        Key={'request_id': request_id},
+                        UpdateExpression='SET user_selected_option_id = :sel_opt, #status = :status, updated_at = :updated',
+                        ExpressionAttributeNames={'#status': 'status'},
+                        ExpressionAttributeValues={
+                            ':sel_opt': recommended_option_id,
+                            ':status': Status.IN_PROGRESS.value,
+                            ':updated': datetime.now(timezone.utc).isoformat()
+                        }
+                    )
+                    
+                    log_to_cloudwatch('auto_execution_success', {
+                        'request_id': request_id,
+                        'recommended_option_id': recommended_option_id,
+                        'action': selected_option['action']
+                    })
+                else:
+                    logger.warning(f"Recommended option {recommended_option_id} not found in simulated options")
+            
+            except Exception as exec_error:
+                logger.error(f"Auto-execution failed: {exec_error}")
+                log_to_cloudwatch('auto_execution_failed', {
+                    'request_id': request_id,
+                    'error': str(exec_error)
+                })
         
         processing_time = (time.time() - start_time) * 1000
         logger.info(f"Request {request_id} processed in {processing_time:.2f}ms")
         
-
         # Log request completion summary
         log_to_cloudwatch('request_completed', {
             'request_id': request_id,
@@ -417,6 +473,7 @@ async def submit_request(request: MessageRequest):
             'risk_score': round(risk_score, 3) if risk_score else None,
             'options_count': len(simulated_options) if simulated_options else 0,
             'recommended_option': recommended_option_id,
+            'auto_executed': bool(execution_result),
             'processing_time_ms': round(processing_time, 2),
             'status': 'success'
         })
@@ -448,6 +505,12 @@ async def submit_request(request: MessageRequest):
         # Add decision data if available
         if decision_data:
             response["decision"] = decision_data
+            
+        # Add execution result if available
+        if execution_result:
+            response["execution"] = execution_result
+            response["status"] = "in_progress" # Update status in response
+            response["message"] = "Request submitted and action executed automatically!"
         
         return response
     except HTTPException:
