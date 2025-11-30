@@ -40,12 +40,27 @@ class HealthCheck(BaseModel):
     service: str
 
 
+class ResidentPreferences(BaseModel):
+    """Resident preferences for service appointments"""
+    allow_entry_when_absent: bool = Field(default=False, description="Permission for technician to enter if resident is not home")
+    preferred_time_slots: Optional[List[str]] = Field(None, description="Preferred time slots (e.g., 'morning', 'afternoon', 'evening', '9am-12pm')")
+    preferred_days: Optional[List[str]] = Field(None, description="Preferred days (e.g., 'Monday', 'Tuesday', 'weekdays', 'weekends')")
+    avoid_days: Optional[List[str]] = Field(None, description="Days to avoid (e.g., 'Monday', 'Tuesday')")
+    special_instructions: Optional[str] = Field(None, description="Any special instructions for the technician")
+    contact_before_arrival: bool = Field(default=True, description="Should technician contact before arriving")
+    emergency_contact: Optional[str] = Field(None, description="Emergency contact number if different from resident")
+    
+    class Config:
+        extra = "allow"
+
+
 class MessageRequest(BaseModel):
     resident_id: str = Field(..., description="Resident identifier")
     message_text: str = Field(..., description="Freeform text message from resident")
     timestamp: Optional[datetime] = Field(default_factory=datetime.now)
     category: Optional[IssueCategory] = Field(None, description="Optional category override")
     urgency: Optional[Urgency] = Field(None, description="Optional urgency override")
+    preferences: Optional[ResidentPreferences] = Field(None, description="Resident preferences for service appointments")
 
 
 class ClassificationResponse(BaseModel):
@@ -77,6 +92,7 @@ class ResidentRequest(BaseModel):
     admin_comments: Optional[List[Dict]] = None
     recurring_issue_non_escalated: Optional[bool] = None
     is_recurring_issue: Optional[bool] = None
+    preferences: Optional[Dict[str, Any]] = None  # Store resident preferences
     created_at: datetime
     updated_at: datetime
     

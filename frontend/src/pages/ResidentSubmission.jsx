@@ -4,6 +4,7 @@ import { classifyMessage, submitRequest, selectOption } from "../services/api";
 import { useUser } from "../context/UserContext";
 import LoadingSpinner from "../components/LoadingSpinner";
 import Toast from "../components/Toast";
+import PreferencesForm from "../components/PreferencesForm";
 import { Sparkles, Send, AlertCircle, CheckCircle2, Clock, Zap, DollarSign, Heart, Star, User, UserX, ChevronDown, ChevronUp, Info, Layers, Settings2, ShieldCheck, SlidersHorizontal } from "lucide-react";
 
 const categoryStyles = {
@@ -42,12 +43,13 @@ export default function ResidentSubmission() {
   const [selectingOption, setSelectingOption] = useState(false);
   const debounceRef = useRef(null);
   const abortControllerRef = useRef(null);
-  
+
   // NEW: State for option selection flow - allow multiple options to be expanded
   const [expandedOptions, setExpandedOptions] = useState(new Set()); // Track which options' details are expanded
+  const [preferences, setPreferences] = useState(null); // Resident preferences for scheduling
 
   const charCount = useMemo(() => messageText.length || 0, [messageText]);
-  
+
   // Toggle function for expanding/collapsing option details
   const toggleOptionDetails = (optionId) => {
     setExpandedOptions(prev => {
@@ -60,20 +62,20 @@ export default function ResidentSubmission() {
       return newSet;
     });
   };
-  
+
   // Parse action text into steps for display
   const parseActionSteps = (action, reasoning) => {
     const steps = [];
-    
+
     // Try to extract steps from action text
     const text = action + ' ' + reasoning;
-    
+
     // Look for numbered steps or sequential actions
     const numberedSteps = text.match(/\d+[.)]\s*[^.]+\./g);
     if (numberedSteps && numberedSteps.length > 0) {
       return numberedSteps.map(s => s.replace(/^\d+[.)]\s*/, '').trim());
     }
-    
+
     // Look for "first", "then", "finally" patterns
     const sequentialPattern = /(first|then|next|after|finally)[,:]?\s*([^.]+)/gi;
     let match;
@@ -81,11 +83,11 @@ export default function ResidentSubmission() {
       steps.push(match[2].trim());
     }
     if (steps.length > 0) return steps;
-    
+
     // Look for action keywords
     const actionKeywords = ['contact', 'dispatch', 'schedule', 'send', 'perform', 'check', 'repair', 'replace', 'inspect'];
     const sentences = text.split(/[.;]/).filter(s => s.trim());
-    
+
     for (const sentence of sentences) {
       const lowerSentence = sentence.toLowerCase();
       if (actionKeywords.some(keyword => lowerSentence.includes(keyword))) {
@@ -95,7 +97,7 @@ export default function ResidentSubmission() {
         }
       }
     }
-    
+
     // If we still have no steps, create basic steps from the action
     if (steps.length === 0) {
       if (action.toLowerCase().includes('emergency') || action.toLowerCase().includes('immediate')) {
@@ -112,7 +114,7 @@ export default function ResidentSubmission() {
         steps.push('Follow-up to ensure resolution');
       }
     }
-    
+
     return steps.slice(0, 5); // Limit to 5 steps max
   };
 
@@ -137,11 +139,11 @@ export default function ResidentSubmission() {
 
     // Clear any existing timeout
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    
+
     // Create new abort controller for this request
     abortControllerRef.current = new AbortController();
     const signal = abortControllerRef.current.signal;
-    
+
     // Set a longer debounce (2 seconds) - only classify when user stops typing
     debounceRef.current = setTimeout(async () => {
       // Double-check message hasn't changed (user might have typed more)
@@ -160,12 +162,12 @@ export default function ResidentSubmission() {
         setAnalyzing(true);
         setError("");
         const res = await classifyMessage(residentId, currentMessage, { signal });
-        
+
         // Check again if request was cancelled during API call
         if (signal.aborted) {
           return;
         }
-        
+
         // Only update if message hasn't changed during the API call
         if (messageText.trim() === currentMessage) {
           setAnalysis(res);
@@ -178,7 +180,7 @@ export default function ResidentSubmission() {
         if (e.name === 'AbortError' || e.name === 'CanceledError' || signal.aborted) {
           return;
         }
-        
+
         // Only show error if message hasn't changed and not aborted
         if (messageText.trim() === currentMessage && !signal.aborted) {
           setError("We couldn't analyze the message. Check your connection and try again.");
@@ -223,25 +225,25 @@ export default function ResidentSubmission() {
     try {
       const category = watch("category") || analysis?.category;
       const urgency = watch("urgency") || analysis?.urgency;
-      const result = await submitRequest(residentId, messageText, category, urgency);
-      
+      const result = await submitRequest(residentId, messageText, category, urgency, preferences);
+
       // Check if this was a question that got answered
       if (result.status === "answered") {
         setToast({
           message: "Your question has been answered!",
           type: "success",
         });
-        
+
         // Show the answer in a nice format
         setSubmittedResult({
           ...result,
           isQuestion: true
         });
-        
+
         // Don't auto-reset - let user read and manually clear if they want
         return;
       }
-      
+
       // Check if LLM generation failed
       if (result.status === "error") {
         setError(result.message);
@@ -249,7 +251,7 @@ export default function ResidentSubmission() {
           message: result.message,
           type: "error"
         });
-        
+
         // Store error result with request_id so user can escalate
         setSubmittedResult({
           ...result,
@@ -258,13 +260,24 @@ export default function ResidentSubmission() {
         });
         return;
       }
-      
-      // Store result and show option selection
-      setSubmittedResult(result);
+
+      // Success! Show confirmation toast and clear form
       setToast({
-        message: `Request classified! Please select a resolution option.`,
+        message: result.message || "Request submitted successfully! We're working on it.",
         type: "success",
       });
+
+      // Store result to show confirmation
+      setSubmittedResult(result);
+
+      // Clear form after 2 seconds
+      setTimeout(() => {
+        reset();
+        setAnalysis(null);
+        setSubmittedResult(null);
+        setPreferences(null);
+      }, 3000);
+
     } catch (e) {
       setToast({ message: e.response?.data?.detail || "Unable to submit request. Please try again.", type: "error" });
       setError(e.response?.data?.detail || "Failed to submit request.");
@@ -272,37 +285,38 @@ export default function ResidentSubmission() {
       setSubmitting(false);
     }
   };
-  
+
   // NEW: Handle option selection
   const handleSelectOption = async (optionId) => {
     if (!submittedResult || !submittedResult.request_id) {
-      setToast({ 
-        message: "Request ID not available. Please try submitting again.", 
-        type: "error" 
+      setToast({
+        message: "Request ID not available. Please try submitting again.",
+        type: "error"
       });
       return;
     }
-    
+
     setSelectingOption(true);
     try {
       const result = await selectOption(submittedResult.request_id, optionId);
       setToast({
-        message: result.message || (optionId === "escalate_to_human" 
+        message: result.message || (optionId === "escalate_to_human"
           ? "Your request has been escalated to human support. You'll receive a response within 24 hours."
           : "Option selected successfully! Your request is now being processed."),
         type: "success",
       });
-      
+
       // Reset form after option selection
       setTimeout(() => {
         reset();
         setAnalysis(null);
         setSubmittedResult(null);
+        setPreferences(null);
       }, 2000);
     } catch (e) {
-      setToast({ 
-        message: "Failed to select option. Please try again.", 
-        type: "error" 
+      setToast({
+        message: "Failed to select option. Please try again.",
+        type: "error"
       });
     } finally {
       setSelectingOption(false);
@@ -375,6 +389,12 @@ export default function ResidentSubmission() {
                     </span>
                   )}
                 </div>
+
+                {/* Preferences Form */}
+                <div className="mt-6">
+                  <PreferencesForm preferences={preferences} onChange={setPreferences} />
+                </div>
+
                 <div className="mt-6 space-y-3">
                   <div className="flex flex-wrap items-center gap-3">
                     <button
@@ -489,14 +509,12 @@ export default function ResidentSubmission() {
                 <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                   <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Quick overview</p>
                   <div className="space-y-3 text-sm">
-                    <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${
-                      categoryStyles[watch("category") || analysis.category] || "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                    }`}>
+                    <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${categoryStyles[watch("category") || analysis.category] || "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                      }`}>
                       Category · {watch("category") || analysis.category}
                     </div>
-                    <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${
-                      urgencyStyles[watch("urgency") || analysis.urgency] || "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                    }`}>
+                    <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${urgencyStyles[watch("urgency") || analysis.urgency] || "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                      }`}>
                       Urgency · {watch("urgency") || analysis.urgency}
                     </div>
                   </div>
@@ -521,7 +539,7 @@ export default function ResidentSubmission() {
                       {submittedResult.answer.text}
                     </p>
                   </div>
-                  
+
                   {/* Sources */}
                   {((submittedResult.answer.source_docs || submittedResult.answer.sources)?.length > 0) && (
                     <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900/50 mt-4">
@@ -545,7 +563,7 @@ export default function ResidentSubmission() {
                       </div>
                     </div>
                   )}
-                  
+
                   {/* Confidence indicator */}
                   <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                     <span>Confidence:</span>
@@ -580,7 +598,7 @@ export default function ResidentSubmission() {
                       {submittedResult.message || "We encountered an issue while processing your request."}
                     </p>
                   </div>
-                  
+
                   {/* Classification info */}
                   {submittedResult.classification && (
                     <div className="rounded-lg border border-amber-200 bg-white p-4 dark:border-amber-800 dark:bg-slate-950">
@@ -603,7 +621,7 @@ export default function ResidentSubmission() {
                       </div>
                     </div>
                   )}
-                  
+
                   {/* Escalation button */}
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-2">
                     <button
@@ -643,11 +661,10 @@ export default function ResidentSubmission() {
                   return (
                     <div
                       key={option.option_id}
-                      className={`flex flex-col rounded-xl border p-4 shadow-sm transition hover:border-slate-400 hover:shadow-md dark:hover:border-slate-500 ${
-                        isRecommended
-                          ? 'border-emerald-500 ring-2 ring-emerald-300 dark:border-emerald-400 dark:ring-emerald-700 bg-emerald-50/40 dark:bg-emerald-900/30'
-                          : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-950'
-                      }`}
+                      className={`flex flex-col rounded-xl border p-4 shadow-sm transition hover:border-slate-400 hover:shadow-md dark:hover:border-slate-500 ${isRecommended
+                        ? 'border-emerald-500 ring-2 ring-emerald-300 dark:border-emerald-400 dark:ring-emerald-700 bg-emerald-50/40 dark:bg-emerald-900/30'
+                        : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-950'
+                        }`}
                       aria-label={isRecommended ? 'AI Recommended Option' : undefined}
                     >
                       <div className="flex-grow space-y-2">
@@ -666,19 +683,18 @@ export default function ResidentSubmission() {
                           <p className="flex justify-between"><span>Satisfaction</span><span>{Math.round((option.resident_satisfaction_impact || 0) * 100)}%</span></p>
                         </div>
                       </div>
-                      
+
                       {/* Details Dropdown with smooth animation */}
-                      <div className={`overflow-hidden transition-all duration-300 ease-in-out ${
-                        expandedOptions.has(option.option_id) ? 'max-h-[500px] opacity-100 mt-3' : 'max-h-0 opacity-0'
-                      }`}>
+                      <div className={`overflow-hidden transition-all duration-300 ease-in-out ${expandedOptions.has(option.option_id) ? 'max-h-[500px] opacity-100 mt-3' : 'max-h-0 opacity-0'
+                        }`}>
                         <div className="rounded-lg bg-white p-3 shadow-inner dark:bg-slate-900">
                           <p className="mb-2 text-xs font-semibold text-slate-700 dark:text-slate-300">What happens with this option:</p>
                           <div className="space-y-3 text-xs text-slate-600 dark:text-slate-400">
                             {/* Action steps - use LLM-generated steps if available, otherwise parse */}
                             <div>
                               <ul className="space-y-2">
-                                {(option.steps && option.steps.length > 0 
-                                  ? option.steps 
+                                {(option.steps && option.steps.length > 0
+                                  ? option.steps
                                   : parseActionSteps(option.action, option.reasoning)
                                 ).map((step, idx) => (
                                   <li key={idx} className="flex items-start gap-2">
@@ -690,7 +706,7 @@ export default function ResidentSubmission() {
                                 ))}
                               </ul>
                             </div>
-                            
+
                             {/* Source documents */}
                             {option.source_doc_ids && option.source_doc_ids.length > 0 && (
                               <div className="pt-2 border-t border-slate-200 dark:border-slate-700">
@@ -712,7 +728,7 @@ export default function ResidentSubmission() {
                           </div>
                         </div>
                       </div>
-                      
+
                       <div className="mt-4 space-y-2 flex-shrink-0">
                         <button
                           onClick={() => toggleOptionDetails(option.option_id)}
@@ -746,13 +762,12 @@ export default function ResidentSubmission() {
                   const isRecurring = submittedResult.simulation?.is_recurring;
                   const occurrenceCount = submittedResult.simulation?.occurrence_count || 2;
                   const isRecommended = submittedResult.simulation?.recommended_option_id === "escalate_to_human";
-                  
+
                   return (
-                    <div className={`flex flex-col rounded-xl border p-4 shadow-sm transition hover:shadow-md ${
-                      isRecommended && isRecurring
-                        ? 'border-emerald-500 ring-2 ring-emerald-300 dark:border-emerald-400 dark:ring-emerald-700 bg-emerald-50/40 dark:bg-emerald-900/30'
-                        : 'border-rose-200 bg-rose-50 dark:border-rose-800 dark:bg-rose-950/30 hover:border-rose-300 dark:hover:border-rose-600'
-                    }`}>
+                    <div className={`flex flex-col rounded-xl border p-4 shadow-sm transition hover:shadow-md ${isRecommended && isRecurring
+                      ? 'border-emerald-500 ring-2 ring-emerald-300 dark:border-emerald-400 dark:ring-emerald-700 bg-emerald-50/40 dark:bg-emerald-900/30'
+                      : 'border-rose-200 bg-rose-50 dark:border-rose-800 dark:bg-rose-950/30 hover:border-rose-300 dark:hover:border-rose-600'
+                      }`}>
                       <div className="flex-grow space-y-2">
                         <div className="flex items-center gap-2">
                           {isRecommended && isRecurring && (
@@ -763,7 +778,7 @@ export default function ResidentSubmission() {
                         </div>
                         <p className="text-xs font-semibold uppercase tracking-wide text-rose-500 dark:text-rose-300">Need a person?</p>
                         <h4 className="text-base font-semibold text-rose-600 dark:text-rose-200">
-                          {isRecurring 
+                          {isRecurring
                             ? `Escalate to Admin - Recurring Issue (${occurrenceCount} time${occurrenceCount > 1 ? 's' : ''})`
                             : "Escalate to human support"
                           }
@@ -778,11 +793,10 @@ export default function ResidentSubmission() {
                       <button
                         onClick={() => handleSelectOption("escalate_to_human")}
                         disabled={selectingOption}
-                        className={`mt-4 flex-shrink-0 inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-60 ${
-                          isRecommended && isRecurring
-                            ? 'bg-emerald-600 hover:bg-emerald-500 dark:bg-emerald-500 dark:text-emerald-950 dark:hover:bg-emerald-400'
-                            : 'bg-rose-500 hover:bg-rose-400 dark:bg-rose-400 dark:text-rose-950 dark:hover:bg-rose-300'
-                        }`}
+                        className={`mt-4 flex-shrink-0 inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-60 ${isRecommended && isRecurring
+                          ? 'bg-emerald-600 hover:bg-emerald-500 dark:bg-emerald-500 dark:text-emerald-950 dark:hover:bg-emerald-400'
+                          : 'bg-rose-500 hover:bg-rose-400 dark:bg-rose-400 dark:text-rose-950 dark:hover:bg-rose-300'
+                          }`}
                       >
                         <UserX className="h-4 w-4" />
                         {selectingOption ? "Processing..." : "Escalate to human"}

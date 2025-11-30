@@ -16,7 +16,7 @@ export async function classifyMessage(residentId, messageText, options = {}) {
   }, {
     signal: options.signal,
   });
-  
+
   return data;
 }
 
@@ -34,14 +34,15 @@ export async function getAllRequests(adminApiKey) {
   return data;
 }
 
-export async function submitRequest(residentId, messageText, category = null, urgency = null) {
+export async function submitRequest(residentId, messageText, category = null, urgency = null, preferences = null) {
   const payload = {
     resident_id: residentId,
     message_text: messageText,
   };
   if (category) payload.category = category;
   if (urgency) payload.urgency = urgency;
-  
+  if (preferences) payload.preferences = preferences;
+
   const { data } = await apiClient.post("/api/v1/submit-request", payload);
   return data;
 }
@@ -60,7 +61,7 @@ export async function resolveRequest(requestId, resolvedBy, resolutionNotes = nu
     resolved_by: resolvedBy,
   };
   if (resolutionNotes) payload.resolution_notes = resolutionNotes;
-  
+
   const { data } = await apiClient.post("/api/v1/resolve-request", payload);
   return data;
 }

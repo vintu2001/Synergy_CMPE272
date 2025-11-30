@@ -36,3 +36,8 @@ class ExecutionRequest(BaseModel):
     reasoning: str
     alternatives_considered: List[str]
     category: str
+    request_id: Optional[str] = None
+    resident_id: Optional[str] = None
+    estimated_cost: Optional[float] = None
+    estimated_time: Optional[float] = None
+    resident_preferences: Optional[Dict[str, Any]] = None  # Resident preferences for scheduling
