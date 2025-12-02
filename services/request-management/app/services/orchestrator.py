@@ -419,11 +419,13 @@ async def submit_request(request: MessageRequest):
                                 "option_id": "escalate_to_human",
                                 "action": "Escalate to Human Administrator",
                                 "estimated_cost": 0.0,
-                                "estimated_time": 0.0,
+                                "estimated_time": 24.0,
                                 "resident_satisfaction_impact": 0.9,
-                                "reasoning": "Recurring issue requires human intervention"
+                                "reasoning": "Recurring issue requires human intervention",
+                                "escalation_reason": "recurring_issue"
                             }
                             simulated_options.append(escalation_option)
+                            logger.info(f"Added escalation option to simulated_options. Total options: {len(simulated_options)}")
                             
                             # Update simulated_options in DB
                             try:
@@ -435,6 +437,7 @@ async def submit_request(request: MessageRequest):
                                         ':sim_opts': simulated_options
                                     }
                                 )
+                                logger.info(f"Updated DynamoDB with escalation option")
                             except Exception as e:
                                 logger.warning(f"Failed to update simulated_options with escalation: {e}")
 
@@ -494,7 +497,15 @@ async def submit_request(request: MessageRequest):
                         execution_response.raise_for_status()
                         execution_result = execution_response.json()
                     
-                    # Update request status to IN_PROGRESS and set user_selected_option_id (as if user selected it)
+                    # Determine status based on option type
+                    if recommended_option_id == "escalate_to_human":
+                        new_status = Status.ESCALATED.value
+                        logger.info(f"Setting status to ESCALATED for escalation option")
+                    else:
+                        new_status = Status.IN_PROGRESS.value
+                        logger.info(f"Setting status to IN_PROGRESS for normal option")
+                    
+                    # Update request status and set user_selected_option_id (as if user selected it)
                     table = get_table()
                     table.update_item(
                         Key={'request_id': request_id},
@@ -502,10 +513,11 @@ async def submit_request(request: MessageRequest):
                         ExpressionAttributeNames={'#status': 'status'},
                         ExpressionAttributeValues={
                             ':sel_opt': recommended_option_id,
-                            ':status': Status.IN_PROGRESS.value,
+                            ':status': new_status,
                             ':updated': datetime.now(timezone.utc).isoformat()
                         }
                     )
+                    logger.info(f"Updated request status to {new_status}")
                     
                     log_to_cloudwatch('auto_execution_success', {
                         'request_id': request_id,
