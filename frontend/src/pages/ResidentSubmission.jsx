@@ -123,7 +123,7 @@ export default function ResidentSubmission() {
               <div>
                 <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">Submit a new service request</h1>
                 <p className="mt-1 text-sm text-slate-500 dark:text-slate-300">
-                  Provide a clear description of your issue. Our AI will suggest the best category and urgency, and you can choose how you want it resolved.
+                  Describe your issue with all the details for quick and appropriate resolution.
                 </p>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">

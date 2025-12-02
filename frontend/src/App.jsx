@@ -52,7 +52,7 @@ function Layout({ children }) {
               </div>
               <div>
                 <h1 className="text-xl font-semibold text-slate-900 dark:text-white">
-                  Synergy Apartment Portal
+                  SAM
                 </h1>
                 <p className="text-xs text-slate-500 dark:text-slate-300">AI-assisted resident and admin workspace</p>
               </div>
