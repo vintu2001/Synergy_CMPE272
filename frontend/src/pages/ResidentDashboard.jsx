@@ -271,34 +271,34 @@ export default function ResidentDashboard() {
       {/* Resolve Modal */}
       {resolveModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-700 dark:bg-slate-900">
             <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-xl font-bold text-gray-900">Mark as Resolved</h3>
+              <h3 className="text-xl font-bold text-slate-900 dark:text-white">Mark as Resolved</h3>
               <button
                 onClick={() => {
                   setResolveModal(null);
                   setResolutionNotes("");
                 }}
-                className="rounded-lg p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+                className="rounded-lg p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
             
             <div className="mb-4">
-              <p className="mb-2 text-sm text-gray-600">Request:</p>
-              <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-900">
+              <p className="mb-2 text-sm text-slate-600 dark:text-slate-400">Request:</p>
+              <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-900 dark:bg-slate-800 dark:text-slate-100">
                 {resolveModal.requestText}
               </p>
             </div>
             
             <div className="mb-6">
-              <label className="mb-2 block text-sm font-semibold text-gray-700">
+              <label className="mb-2 block text-sm font-semibold text-slate-700 dark:text-slate-300">
                 Resolution Notes (Optional)
               </label>
               <textarea
                 rows={4}
-                className="w-full rounded-lg border-2 border-gray-200 px-4 py-3 text-sm transition-all focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                className="w-full rounded-lg border-2 border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 transition-all focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-400 dark:focus:ring-slate-800"
                 placeholder="Add any notes about how the issue was resolved..."
                 value={resolutionNotes}
                 onChange={(e) => setResolutionNotes(e.target.value)}
@@ -311,7 +311,7 @@ export default function ResidentDashboard() {
                   setResolveModal(null);
                   setResolutionNotes("");
                 }}
-                className="flex-1 rounded-lg border-2 border-gray-300 px-4 py-2 font-semibold text-gray-700 transition-all hover:bg-gray-50"
+                className="flex-1 rounded-lg border-2 border-slate-300 bg-white px-4 py-2 font-semibold text-slate-700 transition-all hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
               >
                 Cancel
               </button>

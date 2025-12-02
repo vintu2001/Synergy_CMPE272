@@ -112,6 +112,12 @@ async def submit_request(request: MessageRequest):
                     
                     # Create a request record for tracking
                     now = datetime.now(timezone.utc)
+                    
+                    # Store preferences if provided
+                    preferences_dict = None
+                    if request.preferences:
+                        preferences_dict = request.preferences.model_dump()
+                    
                     resident_request = ResidentRequest(
                         request_id=request_id,
                         resident_id=request.resident_id,
@@ -123,6 +129,7 @@ async def submit_request(request: MessageRequest):
                         risk_forecast=None,
                         classification_confidence=confidence,
                         simulated_options=None,
+                        preferences=preferences_dict,
                         created_at=now,
                         updated_at=now
                     )
@@ -248,6 +255,12 @@ async def submit_request(request: MessageRequest):
         # If LLM generation failed, still create request in database for escalation
         if llm_generation_failed:
             now = datetime.now(timezone.utc)
+            
+            # Store preferences if provided
+            preferences_dict = None
+            if request.preferences:
+                preferences_dict = request.preferences.model_dump()
+            
             resident_request = ResidentRequest(
                 request_id=request_id,
                 resident_id=request.resident_id,
@@ -259,6 +272,7 @@ async def submit_request(request: MessageRequest):
                 risk_forecast=risk_score,
                 classification_confidence=confidence,
                 simulated_options=None,
+                preferences=preferences_dict,
                 created_at=now,
                 updated_at=now
             )
@@ -308,6 +322,11 @@ async def submit_request(request: MessageRequest):
         
         now = datetime.now(timezone.utc)
         
+        # Store preferences if provided
+        preferences_dict = None
+        if request.preferences:
+            preferences_dict = request.preferences.model_dump()
+        
         resident_request = ResidentRequest(
             request_id=request_id,
             resident_id=request.resident_id,
@@ -319,6 +338,7 @@ async def submit_request(request: MessageRequest):
             risk_forecast=risk_score,
             classification_confidence=confidence,
             simulated_options=simulated_options,
+            preferences=preferences_dict,
             created_at=now,
             updated_at=now
         )
@@ -386,6 +406,41 @@ async def submit_request(request: MessageRequest):
                 # Use recommended_option_id if provided, otherwise fall back to chosen_option_id
                 recommended_option_id = decision_data.get("recommended_option_id") or decision_data.get("chosen_option_id")
                 logger.info(f"AI recommended option: {recommended_option_id} (recurring: {is_recurring})")
+                
+                # Ensure recommended option exists in simulated_options
+                if recommended_option_id:
+                    option_exists = any(opt.get('option_id') == recommended_option_id for opt in simulated_options)
+                    if not option_exists:
+                        logger.warning(f"Recommended option {recommended_option_id} not in simulated options. Adding it.")
+                        
+                        # Create escalation option if that's the recommendation
+                        if recommended_option_id == "escalate_to_human":
+                            escalation_option = {
+                                "option_id": "escalate_to_human",
+                                "action": "Escalate to Human Administrator",
+                                "estimated_cost": 0.0,
+                                "estimated_time": 24.0,
+                                "resident_satisfaction_impact": 0.9,
+                                "reasoning": "Recurring issue requires human intervention",
+                                "escalation_reason": "recurring_issue"
+                            }
+                            simulated_options.append(escalation_option)
+                            logger.info(f"Added escalation option to simulated_options. Total options: {len(simulated_options)}")
+                            
+                            # Update simulated_options in DB
+                            try:
+                                table = get_table()
+                                table.update_item(
+                                    Key={'request_id': request_id},
+                                    UpdateExpression='SET simulated_options = :sim_opts',
+                                    ExpressionAttributeValues={
+                                        ':sim_opts': simulated_options
+                                    }
+                                )
+                                logger.info(f"Updated DynamoDB with escalation option")
+                            except Exception as e:
+                                logger.warning(f"Failed to update simulated_options with escalation: {e}")
+
         except Exception as decision_error:
             logger.warning(f"Decision recommendation failed (non-critical): {decision_error}")
         
@@ -402,11 +457,86 @@ async def submit_request(request: MessageRequest):
                 )
             except Exception as e:
                 logger.warning(f"Failed to update recommended option: {e}")
+
+        # AUTO-EXECUTION LOGIC
+        execution_result = None
+        if recommended_option_id:
+            logger.info(f"Auto-executing recommended option: {recommended_option_id}")
+            try:
+                # Find the recommended option details
+                selected_option = next(
+                    (opt for opt in simulated_options if opt['option_id'] == recommended_option_id),
+                    None
+                )
+                
+                if selected_option:
+                    # Execute the selected option (Execution Service)
+                    category = final_category
+                    
+                    async with httpx.AsyncClient(timeout=30.0) as client:
+                        execution_payload = {
+                            "chosen_action": selected_option['action'],
+                            "chosen_option_id": recommended_option_id,
+                            "reasoning": selected_option.get('reasoning', ''),
+                            "alternatives_considered": [],
+                            "category": category.value,
+                            "request_id": request_id,
+                            "resident_id": request.resident_id,
+                            "estimated_cost": selected_option.get('estimated_cost'),
+                            "estimated_time": selected_option.get('estimated_time')
+                        }
+                        
+                        # Include preferences if provided
+                        if preferences_dict:
+                            execution_payload["resident_preferences"] = preferences_dict
+                        
+                        execution_response = await client.post(
+                            f"{EXECUTION_URL}/api/v1/execute",
+                            json=execution_payload
+                        )
+                        execution_response.raise_for_status()
+                        execution_result = execution_response.json()
+                    
+                    # Determine status based on option type
+                    if recommended_option_id == "escalate_to_human":
+                        new_status = Status.ESCALATED.value
+                        logger.info(f"Setting status to ESCALATED for escalation option")
+                    else:
+                        new_status = Status.IN_PROGRESS.value
+                        logger.info(f"Setting status to IN_PROGRESS for normal option")
+                    
+                    # Update request status and set user_selected_option_id (as if user selected it)
+                    table = get_table()
+                    table.update_item(
+                        Key={'request_id': request_id},
+                        UpdateExpression='SET user_selected_option_id = :sel_opt, #status = :status, updated_at = :updated',
+                        ExpressionAttributeNames={'#status': 'status'},
+                        ExpressionAttributeValues={
+                            ':sel_opt': recommended_option_id,
+                            ':status': new_status,
+                            ':updated': datetime.now(timezone.utc).isoformat()
+                        }
+                    )
+                    logger.info(f"Updated request status to {new_status}")
+                    
+                    log_to_cloudwatch('auto_execution_success', {
+                        'request_id': request_id,
+                        'recommended_option_id': recommended_option_id,
+                        'action': selected_option['action']
+                    })
+                else:
+                    logger.warning(f"Recommended option {recommended_option_id} not found in simulated options")
+            
+            except Exception as exec_error:
+                logger.error(f"Auto-execution failed: {exec_error}")
+                log_to_cloudwatch('auto_execution_failed', {
+                    'request_id': request_id,
+                    'error': str(exec_error)
+                })
         
         processing_time = (time.time() - start_time) * 1000
         logger.info(f"Request {request_id} processed in {processing_time:.2f}ms")
         
-
         # Log request completion summary
         log_to_cloudwatch('request_completed', {
             'request_id': request_id,
@@ -417,37 +547,36 @@ async def submit_request(request: MessageRequest):
             'risk_score': round(risk_score, 3) if risk_score else None,
             'options_count': len(simulated_options) if simulated_options else 0,
             'recommended_option': recommended_option_id,
+            'auto_executed': bool(execution_result),
             'processing_time_ms': round(processing_time, 2),
             'status': 'success'
         })
         
+        
+        # Find the selected option for estimated time
+        selected_option_details = None
+        if recommended_option_id and simulated_options:
+            selected_option_details = next(
+                (opt for opt in simulated_options if opt['option_id'] == recommended_option_id),
+                None
+            )
+        
+        # Simplified response for residents - no costs or detailed options
         response = {
-            "status": "submitted",
-            "message": "Request submitted successfully!",
+            "status": "in_progress" if execution_result else "submitted",
+            "message": "Your request has been received and we're working on it!" if execution_result else "Your request has been submitted successfully!",
             "request_id": request_id,
+            "estimated_completion_hours": selected_option_details.get('estimated_time') if selected_option_details else None,
             "classification": {
                 "category": final_category.value,
-                "urgency": final_urgency.value,
-                "intent": intent.value,
-                "confidence": confidence
-            },
-            "risk_assessment": {
-                "risk_forecast": risk_score,
-                "recurrence_probability": recurrence_prob,
-                "risk_level": "High" if risk_score and risk_score > 0.7 else "Medium" if risk_score and risk_score > 0.3 else "Low" if risk_score else "Unknown"
-            } if risk_score is not None else None,
-            "simulation": {
-                "options_generated": len(simulated_options),
-                "options": simulated_options,
-                "recommended_option_id": recommended_option_id,
-                "is_recurring": is_recurring,
-                "occurrence_count": simulation_data.get("occurrence_count")
+                "urgency": final_urgency.value
             }
         }
         
-        # Add decision data if available
-        if decision_data:
-            response["decision"] = decision_data
+        # Add work order ID if execution started
+        if execution_result and "work_order_id" in execution_result:
+            response["work_order_id"] = execution_result["work_order_id"]
+            response["message"] = f"Your request has been received! Work order {execution_result['work_order_id']} has been created and we're working on it."
         
         return response
     except HTTPException:
@@ -580,16 +709,29 @@ async def select_option(selection: SelectOptionRequest):
             from app.models.schemas import IssueCategory
             category = IssueCategory(request.get('category', 'Maintenance'))
             
+            # Get resident preferences from the request
+            preferences = request.get('preferences')
+            
             async with httpx.AsyncClient(timeout=30.0) as client:
+                execution_payload = {
+                    "chosen_action": selected_option['action'],
+                    "chosen_option_id": selection.selected_option_id,
+                    "reasoning": selected_option.get('reasoning', ''),
+                    "alternatives_considered": [],
+                    "category": category.value,
+                    "request_id": selection.request_id,
+                    "resident_id": request.get('resident_id'),
+                    "estimated_cost": selected_option.get('estimated_cost'),
+                    "estimated_time": selected_option.get('estimated_time')
+                }
+                
+                # Include preferences if available
+                if preferences:
+                    execution_payload["resident_preferences"] = preferences
+                
                 execution_response = await client.post(
                     f"{EXECUTION_URL}/api/v1/execute",
-                    json={
-                        "chosen_action": selected_option['action'],
-                        "chosen_option_id": selection.selected_option_id,
-                        "reasoning": selected_option.get('reasoning', ''),
-                        "alternatives_considered": [],
-                        "category": category.value
-                    }
+                    json=execution_payload
                 )
                 execution_response.raise_for_status()
                 execution_result = execution_response.json()

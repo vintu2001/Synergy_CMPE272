@@ -50,7 +50,7 @@ export default function Home() {
             <div>
               <div className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-1.5 text-sm font-semibold text-white shadow-lg dark:bg-slate-200 dark:text-slate-900 mb-4">
                 <Building2 className="h-4 w-4" />
-                Synergy Apartment Portal
+                SAM (Synergy Apartment Manager)
               </div>
               <h1 className="text-3xl md:text-4xl font-bold text-slate-900 dark:text-white mb-3">
                 AI-Powered Apartment Management

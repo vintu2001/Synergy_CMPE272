@@ -345,44 +345,41 @@ Return ONLY the JSON object. DO NOT use categories outside the 5 allowed ones.""
 @router.post("/classify", response_model=ClassificationResponse)
 async def classify_message(request: MessageRequest) -> ClassificationResponse:
     """
-    Hybrid classification: Rule-based first, Gemini fallback for low confidence.
+    Hybrid classification: Gemini first, rule-based fallback if Gemini fails.
     """
     import logging
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.INFO)
     
-    category, urgency, intent, confidence = rule_based_classification(request.message_text)
-    
     logger.info(f"[CLASSIFY] Message: '{request.message_text[:50]}...'")
-    logger.info(f"[CLASSIFY] Rule-based: category={category}, urgency={urgency}, intent={intent}, confidence={confidence}")
     
-    if confidence < 0.7 or category is None or urgency is None:
-        logger.info(f"[CLASSIFY] Confidence {confidence} < 0.7 - Triggering Gemini fallback")
-        try:
-            gemini_result = await gemini_classification(request.message_text)
-            logger.info(f"[CLASSIFY] Gemini returned: {gemini_result}")
-            return gemini_result
-        except Exception as e:
-            logger.error(f"[CLASSIFY] Gemini failed: {e}")
-            # Fallback to rule-based if Gemini fails
-            if category and urgency:
-                return ClassificationResponse(
-                    category=category,
-                    urgency=urgency,
-                    intent=intent,
-                    confidence=confidence
-                )
+    # Try Gemini first for more accurate classification
+    try:
+        logger.info(f"[CLASSIFY] Attempting Gemini classification first")
+        gemini_result = await gemini_classification(request.message_text)
+        logger.info(f"[CLASSIFY] Gemini returned: {gemini_result}")
+        return gemini_result
+    except Exception as e:
+        logger.error(f"[CLASSIFY] Gemini failed: {e}")
+        logger.info(f"[CLASSIFY] Falling back to rule-based classification")
+        
+        # Fallback to rule-based classification
+        category, urgency, intent, confidence = rule_based_classification(request.message_text)
+        logger.info(f"[CLASSIFY] Rule-based: category={category}, urgency={urgency}, intent={intent}, confidence={confidence}")
+        
+        if category and urgency:
             return ClassificationResponse(
-                category=IssueCategory.MAINTENANCE,
-                urgency=Urgency.MEDIUM,
-                intent=Intent.SOLVE_PROBLEM,
-                confidence=0.5
+                category=category,
+                urgency=urgency,
+                intent=intent,
+                confidence=confidence
             )
-    
-    logger.info(f"[CLASSIFY] Using rule-based result (confidence={confidence} >= 0.7)")
-    return ClassificationResponse(
-        category=category,
-        urgency=urgency,
-        intent=intent,
-        confidence=confidence
-    )
+        
+        # Last resort fallback
+        logger.warning(f"[CLASSIFY] Rule-based also failed, using default values")
+        return ClassificationResponse(
+            category=IssueCategory.MAINTENANCE,
+            urgency=Urgency.MEDIUM,
+            intent=Intent.SOLVE_PROBLEM,
+            confidence=0.5
+        )
