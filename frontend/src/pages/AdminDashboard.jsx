@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { getAllRequests, resolveRequest, updateRequestStatus, addComment, selectOption } from "../services/api";
 import LoadingSpinner from "../components/LoadingSpinner";
 import StatusBadge from "../components/StatusBadge";
-import { Shield, Search, Filter, RefreshCw, Eye, EyeOff, Key, ChevronDown, ChevronRight, DollarSign, Clock, Heart, AlertTriangle, UserX, CheckCircle2, ChevronLeft, MessageSquare, Save, Bell, AlertCircle, Zap } from "lucide-react";
+import { Shield, Search, Filter, RefreshCw, Eye, EyeOff, Key, ChevronDown, ChevronRight, DollarSign, Clock, Heart, AlertTriangle, UserX, CheckCircle2, ChevronLeft, MessageSquare, Save, Bell, AlertCircle, Zap, Info } from "lucide-react";
 
 export default function AdminDashboard() {
   const [apiKey, setApiKey] = useState(localStorage.getItem("admin_api_key") || "");
@@ -265,6 +265,19 @@ export default function AdminDashboard() {
                     <RefreshCw className="h-4 w-4" />
                     Refresh
                   </button>
+                </div>
+              </div>
+
+              {/* Demo Note */}
+              <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50/50 p-3 dark:border-blue-800/50 dark:bg-blue-950/20">
+                <div className="flex items-start gap-2">
+                  <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+                  <div className="text-xs text-blue-800 dark:text-blue-200">
+                    <span className="font-semibold">Demo/Testing:</span> Default admin API key is{" "}
+                    <code className="rounded bg-blue-100 px-1.5 py-0.5 font-mono text-blue-900 dark:bg-blue-900/40 dark:text-blue-100">
+                      your_admin_api_key_here
+                    </code>
+                  </div>
                 </div>
               </div>
             </div>
